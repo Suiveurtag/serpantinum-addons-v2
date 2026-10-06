@@ -2,6 +2,8 @@
 
 Focused addons for the native Serpantinum Settings/Guide, independent of the retired v1 installer.
 
+> **Personal project notice:** This is a personal project and may be unstable. Updates and ongoing maintenance are not guaranteed. Parts of it are developed with vibe coding, so review changes and test them in your own setup before relying on them.
+
 - Addons: opt-in legacy calendar/clock and Mullvad DNS.
 - Network: the same DNS switch, reflecting the active connection.
 - Monitors: recovered v1 screen placement and snapping, resolution cards, rotation dial and refresh-rate slider, with native Guide scaling and an exact-coordinate alternative.
