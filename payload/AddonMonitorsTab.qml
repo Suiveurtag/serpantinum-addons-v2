@@ -333,10 +333,24 @@ Item {
                     clip: true
 
                     // Background dot grid
-                    Grid {
-                        anchors.centerIn: parent
-                        rows: 11; columns: 19; spacing: root.s(18)
-                        Repeater { model: 209; Rectangle { width: root.s(2); height: root.s(2); radius: root.s(1); color: Qt.alpha(root.text, 0.07) } }
+                    Item {
+                        id: monitorCanvasDots
+                        anchors.fill: parent
+                        property real dotSpacing: root.s(18)
+                        property int dotColumns: Math.ceil(width / dotSpacing)
+                        property int dotRows: Math.ceil(height / dotSpacing)
+
+                        Repeater {
+                            model: monitorCanvasDots.dotColumns * monitorCanvasDots.dotRows
+                            Rectangle {
+                                x: (index % monitorCanvasDots.dotColumns) * monitorCanvasDots.dotSpacing
+                                y: Math.floor(index / monitorCanvasDots.dotColumns) * monitorCanvasDots.dotSpacing
+                                width: root.s(2)
+                                height: width
+                                radius: width / 2
+                                color: Qt.alpha(root.text, 0.07)
+                            }
+                        }
                     }
 
                     // Compute layout scale/offset to fit all monitors in the canvas
