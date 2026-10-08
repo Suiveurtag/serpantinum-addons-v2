@@ -66,17 +66,26 @@ def atomic(path, data):
 
 
 def generate(image, config, static_config, mode, scheme, addon_mode, state):
-    subprocess.run(['matugen', 'image', image, '-c', config, '-m', mode, '-t', scheme, '--source-color-index', '0'], check=True)
-    if addon_mode == 'matugen':
-        return
+    subprocess.run(['matugen', 'image', image, '-c', config, '-m', mode, '-t', scheme], check=True)
     state = Path(state)
-    colors = json.loads((state / 'qs_colors.json').read_text())
+    colors_path = state / 'qs_colors.json'
+    matugen_colors_path = state / 'qs_matugen_colors.json'
+    if addon_mode == 'matugen':
+        # Matugen.qml reloads both files as soon as this process exits. Keep the
+        # copy in this process so its watcher cannot race a detached cp command.
+        colors = json.loads(colors_path.read_text())
+        atomic(matugen_colors_path, colors)
+        return
+    colors = json.loads(colors_path.read_text())
     colors.update(palette(image, addon_mode))
     with tempfile.TemporaryDirectory(prefix='serpantinum-colors-') as directory:
         synthetic = Path(directory) / 'colors.json'
         synthetic.write_text(json.dumps(md3(colors)))
         subprocess.run(['matugen', '-c', static_config, '-m', mode, 'json', str(synthetic)], cwd=Path(config).parent, check=True)
-    atomic(state / 'qs_colors.json', colors)
+    # Publish only after both Matugen passes succeeded. The shell's file
+    # watchers are notified before generationFinished is emitted by QML.
+    atomic(colors_path, colors)
+    atomic(matugen_colors_path, colors)
 
 
 if __name__ == '__main__':
