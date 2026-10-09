@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Install only v2 addons, preserving upstream files and unrelated v1 work."""
 import argparse
+import hashlib
+import json
 import os
 import shlex
 import shutil
 import tempfile
+import seasonal
+import seasonal_surfaces
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +18,17 @@ DATA = Path(os.environ.get('XDG_DATA_HOME', HOME / '.local/share'))
 QS = Path(os.environ.get('SERPANTINUM_HOME', DATA / 'serpantinum')) / 'src/quickshell'
 DEPLOY = DATA / 'serpantinum-addons-v2'
 MARK = 'serpantinum-addons-v2'
+
+
+def shader_package_name(folder):
+    source = folder/'atmosphere.frag'
+    package = folder/'atmosphere.frag.qsb'
+    manifest = json.loads((folder/'manifest.json').read_text())
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    package_hash = hashlib.sha256(package.read_bytes()).hexdigest()
+    if manifest.get('source_sha256') != source_hash or manifest.get('package_sha256') != package_hash:
+        raise ValueError('Seasonal shader source/package mismatch; run python3 scripts/build-seasonal-shaders.py')
+    return 'atmosphere.' + package_hash[:12] + '.frag.qsb'
 
 
 def patch_guide(text):
@@ -212,14 +227,30 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = 
     return text.replace(anchor, anchor + addition, 1)
 
 
-def install():
+def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
     pending[keybind_path] = patch_keybinds(keybind_path.read_text())
+    for path, transform in seasonal.transformations(QS).items():
+        text = pending.get(path, path.read_text())
+        pending[path] = seasonal.remove(text) if without_halloween else transform(text)
     payloads = {'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
+    # NativeCalendar is captured before installing the wrapper, then patched in
+    # memory. The native UI remains the source of truth for both seasonal states.
+    native_calendar = QS/'calendar/NativeCalendar.qml'
+    calendar_text = (QS/'calendar/CalendarPopup.qml').read_text()
+    wrapped = '// BEGIN serpantinum-addons-v2 calendar wrapper' in calendar_text
+    if wrapped and not native_calendar.is_file():
+        raise ValueError('Native calendar backup is missing')
+    native_text = native_calendar.read_text() if wrapped else calendar_text
+    clock_transform = seasonal.remove if without_halloween else lambda text: seasonal_surfaces.calendar(seasonal.patch_calendar(text))
+    pending[native_calendar] = clock_transform(native_text)
+    pending[QS/'calendar/LegacyCalendar.qml'] = clock_transform(pending[QS/'calendar/LegacyCalendar.qml'])
+    if without_halloween:
+        pending[QS/'guide/AddonsTab.qml'] = seasonal.remove(pending[QS/'guide/AddonsTab.qml'])
     # Both tabs use the same DNS component; identical payload with appropriate relative imports.
     pending[QS/'guide/DnsControl.qml'] = (SOURCE/'payload/DnsControl.qml').read_text()
     qmldir = QS/'qmldir'
@@ -229,11 +260,21 @@ def install():
         directory = QS/folder/'qmldir'
         original = directory.read_text() if directory.exists() else ''
         pending[directory] = original if 'DnsControl 1.0 DnsControl.qml' in original else original + '\nDnsControl 1.0 DnsControl.qml\n'
-    calendar = QS/'calendar/CalendarPopup.qml'
-    if '// BEGIN serpantinum-addons-v2 calendar wrapper' not in calendar.read_text():
-        pending[QS/'calendar/NativeCalendar.qml'] = calendar.read_text()
-    elif not (QS/'calendar/NativeCalendar.qml').is_file():
-        raise ValueError('Native calendar backup is missing')
+    # Read and verify all payloads before touching the installation. A forgotten
+    # shader rebuild or missing resource must never leave partly applied hooks.
+    shader = SOURCE/'payload/seasonal/shaders/atmosphere.frag.qsb'
+    shader_name = None if without_halloween else shader_package_name(shader.parent)
+    resources = sorted((SOURCE/'payload/seasonal').rglob('*'), key=lambda path: path.suffix != '.qsb')
+    resource_payloads = []
+    for source in resources:
+        if not source.is_file(): continue
+        path = QS/'seasonal'/source.relative_to(SOURCE/'payload/seasonal')
+        blob = source.read_bytes()
+        if not without_halloween:
+            if source == shader: path = path.with_name(shader_name)
+            elif source.name == 'FogLayer.qml':
+                blob = blob.replace(b'shaders/atmosphere.frag.qsb', ('shaders/' + shader_name).encode())
+        resource_payloads.append((path, blob))
     backup = DEPLOY/'backups'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     changed = 0
     for path, text in pending.items():
@@ -246,9 +287,36 @@ def install():
         fd, name = tempfile.mkstemp(dir=path.parent, prefix='.'+path.name)
         with os.fdopen(fd, 'w') as f: f.write(text)
         os.replace(name, path); changed += 1
+    # Binary shader packages are versioned beside readable GLSL sources.
+    for path, blob in resource_payloads:
+        if without_halloween:
+            if path.exists():
+                saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, saved); path.unlink(); changed += 1
+            continue
+        if path.exists() and path.read_bytes() == blob: continue
+        backup.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, saved)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(dir=path.parent, prefix='.'+path.name)
+        with os.fdopen(fd, 'wb') as stream: stream.write(blob)
+        os.replace(name, path); changed += 1
+    # Qt caches GPU programs by URL across hot reloads. Keep only the package
+    # matching this source, retaining dated backups of superseded packages.
+    shader_dir = QS/'seasonal/shaders'
+    if shader_dir.exists():
+        import re
+        for path in shader_dir.iterdir():
+            owned = path.name == 'atmosphere.frag.qsb' or re.fullmatch(r'atmosphere\.[a-f0-9]{12}\.frag\.qsb', path.name)
+            if owned and (without_halloween or path.name != shader_name):
+                saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, saved); path.unlink(); changed += 1
     shutil.copytree(SOURCE/'scripts', DEPLOY/'scripts', dirs_exist_ok=True)
     print(f'v2 installed: {changed} shell files changed; backups: {backup}')
 
 
 if __name__ == '__main__':
-    install()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--without-halloween', action='store_true', help='Remove the seasonal layer while retaining other v2 addons')
+    install(without_halloween=parser.parse_args().without_halloween)

@@ -6,6 +6,7 @@ Focused addons for the native Serpantinum Settings/Guide, independent of the ret
 
 - Addons: opt-in legacy calendar/clock and Mullvad DNS.
 - Trackpad (in Addons): pointer-speed slider, native disable-while-typing protection, and a separate click guard during text entry. Uses the existing SettingsRow, Draggable and Toggle components.
+- Halloween night: one live switch for smoked burgundy surfaces, moving Settings mist, panel hearths, responsive webs, celestial engravings, energy around controls and repeating bat escapes on important hovers. Music gets an audio-reactive corona, system controls get conductive currents, widgets get effects matched to their face, and the network panel gets luminous transmissions along its existing orbital links. OFF unloads effects while preserving the selected theme. Halloween Night is a separate preset in Settings → Themes, with the supplied moon artwork. Directional panel/launcher arrivals, visible background crossings, modular bar charms, candlelit notifications and a finite eclipse intro extend the effects. See [design and validation](docs/halloween.md).
 - Network: the same DNS switch, reflecting the active connection.
 - Monitors: recovered v1 screen placement and snapping, resolution cards, rotation dial and refresh-rate slider, with native Guide scaling and an exact-coordinate alternative.
 - Keybinds: recovered v1 keycaps, sliding edit control, expandable editor, shortcut recording, add/delete/save, and search. Existing Lua actions, options and generated workspace bindings are preserved.

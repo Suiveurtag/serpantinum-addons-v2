@@ -68,6 +68,9 @@ Item {
         anchors.fill: parent; anchors.margins: rootObj.s(24); contentWidth: width; contentHeight: settings.implicitHeight; clip: true
         ColumnLayout {
             id: settings; width: parent.width; spacing: rootObj.s(14)
+            // BEGIN serpantinum-night-v2 option
+            HalloweenCard { rootObj: root.rootObj }
+            // END serpantinum-night-v2 option
             SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_legacy_clock"; searchTab: "addons"; searchKeywords: "calendar clock legacy horloge calendrier"
                 title: "Legacy clock design"; description: "Restore the v1 calendar and clock panel."; icon: "󰥔"

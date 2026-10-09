@@ -1,0 +1,82 @@
+import sys
+import tempfile
+import shutil
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+import install
+import seasonal
+
+
+class SeasonalIntegrationTests(unittest.TestCase):
+    def test_control_hook_preserves_unrelated_escape_calls(self):
+        original = 'Item {\n    id: root\n    function leave() { thirdParty.escape(); }\n}\n'
+        self.assertEqual(original, seasonal.remove(seasonal.patch_control(original)))
+
+    def test_stale_shader_source_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)/'shaders'
+            shutil.copytree(ROOT/'payload/seasonal/shaders', folder)
+            name = install.shader_package_name(folder)
+            self.assertTrue(name.endswith('.frag.qsb'))
+            source = folder/'atmosphere.frag'
+            source.write_text(source.read_text() + '\n// unrecompiled modification\n')
+            with self.assertRaisesRegex(ValueError, 'source/package mismatch'):
+                install.shader_package_name(folder)
+
+    def test_damaged_shader_package_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)/'shaders'
+            shutil.copytree(ROOT/'payload/seasonal/shaders', folder)
+            (folder/'atmosphere.frag.qsb').write_bytes(b'damaged')
+            with self.assertRaisesRegex(ValueError, 'source/package mismatch'):
+                install.shader_package_name(folder)
+
+    def test_reinstall_does_not_duplicate_or_rewrite_hooks(self):
+        for path, transform in seasonal.transformations(install.QS).items():
+            with self.subTest(path=path.name):
+                result = transform(path.read_text())
+                self.assertEqual(result, transform(result))
+
+    def test_normal_color_assignment_is_separate_from_presentation(self):
+        colors = ['base', 'mantle', 'crust', 'surface0', 'surface1', 'surface2',
+                  'overlay0', 'overlay1', 'overlay2', 'text', 'subtext0', 'subtext1',
+                  'blue', 'sapphire', 'peach', 'green', 'red', 'mauve', 'pink', 'yellow', 'maroon', 'teal']
+        # Model the upstream storage/assignment contract, including a custom hue.
+        source = '    id: root\n' + '\n'.join(f'    property color {key}: "#123456"' for key in colors)
+        source += '\nif (root[propName].toString() !== nextColor.toString()) { root[propName] = nextColor; }'
+        result = seasonal.patch_palette(source)
+        for key in colors:
+            self.assertIn(f'property color _normal{key}: "#123456"', result)
+            self.assertIn(f'Halloween.presentColor("{key}", _normal{key})', result)
+        self.assertNotIn('root[propName] =', result)
+        self.assertEqual(result, seasonal.patch_palette(result))
+
+    def test_changed_upstream_palette_fails_before_installation(self):
+        with self.assertRaises(ValueError):
+            seasonal.patch_palette('property color newPalette: "#123456"')
+
+    def test_removal_restores_normal_color_assignment_and_all_hooks(self):
+        for path, transform in seasonal.transformations(install.QS).items():
+            with self.subTest(path=path.name):
+                result = seasonal.remove(transform(path.read_text()))
+                self.assertNotIn('Halloween.', result)
+                self.assertNotIn('sourceComponent: NightPanel', result)
+                self.assertNotIn('sourceComponent: BatBurst', result)
+                self.assertNotIn('property color _normal', result)
+                self.assertEqual(result, seasonal.remove(result))
+
+    def test_both_clock_renderers_keep_the_normal_orbit(self):
+        for name in ('NativeCalendar.qml', 'LegacyCalendar.qml'):
+            with self.subTest(renderer=name):
+                result = seasonal.patch_calendar((install.QS/'calendar'/name).read_text())
+                self.assertEqual(result, seasonal.patch_calendar(result))
+                self.assertEqual(result.count('id: orbitCanvas'), 1)
+                self.assertEqual(result.count('sourceComponent: CelestialDial'), 1)
+                self.assertIn('visible: !Halloween.activeSeason', result)
+
+
+if __name__ == '__main__':
+    unittest.main()
