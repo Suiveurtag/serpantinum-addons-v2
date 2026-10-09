@@ -2,6 +2,7 @@
 """Install only v2 addons, preserving upstream files and unrelated v1 work."""
 import argparse
 import os
+import shlex
 import shutil
 import tempfile
 from datetime import datetime
@@ -137,14 +138,93 @@ def patch_matugen(text):
     return text.replace(anchor, replacement, 1)
 
 
+def patch_shell(text):
+    anchor = '    ScreenshotOverlay {}\n'
+    addition = '    // BEGIN serpantinum-addons-v2 color picker\n    AddonColorPicker {}\n    // END serpantinum-addons-v2 color picker\n'
+    if addition in text: return text
+    if text.count(anchor) != 1: raise ValueError('Shell screenshot anchor changed')
+    return text.replace(anchor, anchor + addition, 1)
+
+
+def patch_floating(text):
+    marker = '                                // BEGIN serpantinum-addons-v2 picker action\n'
+    if marker in text:
+        return text.replace('Quickshell.execDetached(["quickshell", "ipc", "call", "addonColorPicker", "toggle"]);', 'Quickshell.execDetached(["quickshell", "-p", Caching.mainQml, "ipc", "call", "addonColorPicker", "toggle"]);')
+    anchor = '                                Rectangle {\n                                    id: pinButton'
+    if text.count(anchor) != 1: raise ValueError('Quickactions pin anchor changed')
+    action = '''                                // BEGIN serpantinum-addons-v2 picker action
+                                Rectangle {
+                                    id: pickerButton
+                                    width: floatingWidget.buttonSize
+                                    height: floatingWidget.buttonSize
+                                    radius: width / 2
+                                    x: (parent.width - width) / 2
+                                    y: floatingWidget.activeEdge === "left"
+                                        ? pinButton.y + pinButton.height + floatingWidget.s(6)
+                                        : pinButton.y - height - floatingWidget.s(6)
+                                    color: pickerMouse.containsMouse ? Qt.alpha(ThemeBackend.mauve, 0.25) : "transparent"
+                                    border.width: floatingWidget.s(1)
+                                    border.color: pickerMouse.containsMouse ? ThemeBackend.mauve : Qt.alpha(ThemeBackend.text, 0.22)
+                                    scale: pickerMouse.pressed ? 0.88 : (pickerMouse.containsMouse ? 1.12 : 1)
+                                    Behavior on color { ColorAnimation { duration: 180 } }
+                                    Behavior on border.color { ColorAnimation { duration: 180 } }
+                                    Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "󰈊"
+                                        color: pickerMouse.containsMouse ? ThemeBackend.mauve : ThemeBackend.text
+                                        font.family: "Iosevka Nerd Font"
+                                        font.pixelSize: floatingWidget.s(12)
+                                        Behavior on color { ColorAnimation { duration: 180 } }
+                                    }
+                                    MouseArea {
+                                        id: pickerMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onEntered: hideTimer.stop()
+                                        onExited: floatingWidget.kickTimer()
+                                        onClicked: {
+                                            floatingWidget.isExpanded = false;
+                                            floatingWidget.isSidebarVisible = false;
+                                            Quickshell.execDetached(["quickshell", "-p", Caching.mainQml, "ipc", "call", "addonColorPicker", "toggle"]);
+                                        }
+                                    }
+                                }
+                                // END serpantinum-addons-v2 picker action
+
+'''
+    text = text.replace(anchor, action + anchor, 1)
+    return text.replace('property real controlAreaHeight: buttonSize * 2 + s(10)', 'property real controlAreaHeight: buttonSize * 3 + s(16)', 1)
+
+
+def patch_keybinds(text):
+    marker = '-- BEGIN serpantinum-addons-v2 color picker'
+    command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonColorPicker toggle'
+    if marker in text:
+        return text.replace('quickshell ipc call addonColorPicker toggle', command)
+    if '"SUPER + SHIFT + C"' in text: raise ValueError('Color picker shortcut already in use')
+    anchor = 'hl.bind("SUPER + SHIFT + S", hl.dsp.exec_cmd("serpantinum screenshot"), { locked = true })'
+    if text.count(anchor) != 1: raise ValueError('Screenshot shortcut anchor changed')
+    addition = '''\n-- BEGIN serpantinum-addons-v2 color picker
+hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = true })
+-- END serpantinum-addons-v2 color picker'''
+    return text.replace(anchor, anchor + addition, 1)
+
+
 def install():
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
-    patches = {QS/'Main.qml': patch_main, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen}
+    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
-    payloads = {'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    keybind_path = HOME/'.config/hypr/config/keybinds.lua'
+    pending[keybind_path] = patch_keybinds(keybind_path.read_text())
+    payloads = {'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
     # Both tabs use the same DNS component; identical payload with appropriate relative imports.
     pending[QS/'guide/DnsControl.qml'] = (SOURCE/'payload/DnsControl.qml').read_text()
+    qmldir = QS/'qmldir'
+    qmldir_text = qmldir.read_text()
+    pending[qmldir] = qmldir_text if 'AddonColorPicker 1.0 AddonColorPicker.qml' in qmldir_text else qmldir_text + '\nAddonColorPicker 1.0 AddonColorPicker.qml\n'
     for folder in ('guide', 'network'):
         directory = QS/folder/'qmldir'
         original = directory.read_text() if directory.exists() else ''
@@ -160,7 +240,8 @@ def install():
         if path.is_file() and path.read_text() == text: continue
         backup.mkdir(parents=True, exist_ok=True)
         if path.exists():
-            saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, saved)
+            relative = Path('hypr/keybinds.lua') if path == keybind_path else path.relative_to(QS)
+            saved = backup/relative; saved.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, saved)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=path.parent, prefix='.'+path.name)
         with os.fdopen(fd, 'w') as f: f.write(text)

@@ -19,6 +19,16 @@ installer = load('installer', ROOT/'install.py')
 
 
 class ChangeTests(unittest.TestCase):
+    def test_color_picker_hooks_are_idempotent(self):
+        for file, patch in [('Shell.qml', installer.patch_shell), ('quickactions/Floating.qml', installer.patch_floating)]:
+            original = (installer.QS/file).read_text()
+            result = patch(original)
+            self.assertEqual(result, patch(result))
+        keys = 'hl.bind("SUPER + SHIFT + S", hl.dsp.exec_cmd("serpantinum screenshot"), { locked = true })\n'
+        patched = installer.patch_keybinds(keys)
+        self.assertEqual(patched, installer.patch_keybinds(patched))
+        self.assertIn('addonColorPicker toggle', patched)
+
     def test_guide_idempotence_and_about_order(self):
         text = (installer.QS/'guide/GuidePopup.qml').read_text()
         patched = installer.patch_guide(text)

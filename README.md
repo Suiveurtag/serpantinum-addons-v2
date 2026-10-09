@@ -9,6 +9,7 @@ Focused addons for the native Serpantinum Settings/Guide, independent of the ret
 - Network: the same DNS switch, reflecting the active connection.
 - Monitors: recovered v1 screen placement and snapping, resolution cards, rotation dial and refresh-rate slider, with native Guide scaling and an exact-coordinate alternative.
 - Keybinds: recovered v1 keycaps, sliding edit control, expandable editor, shortcut recording, add/delete/save, and search. Existing Lua actions, options and generated workspace bindings are preserved.
+- Color picker: `Super+Shift+C` or the pipette in the corner quick actions freezes the current screen, opens with a flowing theme-colored screen outline and a compact HEX preview. Click to expand the copy controls for HEX, RGB and HSL. A full-card confirmation animation closes the picker after a successful copy. Escape closes it; Enter selects the color, then copies HEX. Requires `grim` and `wl-copy`.
 - Theme: Matugen, Vibrant and Vivid use the shell's original wallpaper theme tiles, colors, selection and animations.
 - About stays last. Dragging Settings uses its title area; dragging an individual monitor affects the preview only, until Apply.
 
@@ -18,7 +19,7 @@ Run `python3 install.py` from the repository root, then `serpantinum reload`.
 
 Requires the installed Serpantinum shell, Hyprland Lua configuration, NetworkManager, systemd-resolved, jq, matugen and Python with Pillow. Installation retains dated shell backups in `~/.local/share/serpantinum-addons-v2/backups/`. Reinstall after updating upstream; the patcher verifies known anchors before changing the shell.
 
-Monitor changes apply to `~/.config/hypr/config/monitors.lua`. Keyboard edits update literal bindings in `~/.config/hypr/config/keybinds.lua`; generated workspace loops remain intact. Both backends save backups and restore the previous file if reloading reports a configuration error. Conflicting external keybind edits require reloading the editor.
+Monitor changes apply to `~/.config/hypr/config/monitors.lua`. Keyboard edits update literal bindings in `~/.config/hypr/config/keybinds.lua`; generated workspace loops remain intact. Both backends save backups and restore the previous file if reloading reports a configuration error. Conflicting external keybind edits require reloading the editor. The installer adds the color picker shortcut to the same Hyprland file and backs up its previous version.
 
 Vibrant selects actual sampled wallpaper colors as accents. Vivid retains their hue while increasing saturation and brightness. Shell surfaces and text retain the upstream palette for readability; synthetic Matugen templates update application colors alongside the shell. Matugen mode follows the native generator.
 
