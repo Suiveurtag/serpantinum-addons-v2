@@ -49,7 +49,12 @@ def patch_guide(text):
     # End marker sits before About now; remove it separately on later installs.
     text = re.sub(r'        // BEGIN serpantinum-addons-v2 tabs.*?        // END serpantinum-addons-v2 tabs\n', '', text, flags=re.S)
     text = text.replace(anchor, block + anchor, 1)
-    start = text.index('                                Rectangle {\n                                    id: tabAbout')
+    legacy_sidebar_anchor = '                                Rectangle {\n                                    id: tabAbout'
+    if legacy_sidebar_anchor not in text:
+        # Newer Guide versions build their sidebar directly from tabsModel.
+        if 'tabAbout' not in text: return text
+        raise ValueError('Guide sidebar anchor changed')
+    start = text.index(legacy_sidebar_anchor)
     depth = 0
     for stop in range(start, len(text)):
         if text[stop] == '{': depth += 1
@@ -103,6 +108,45 @@ def patch_network(text):
     // END serpantinum-addons-v2 dns
 '''
     return text.replace(anchor, anchor + block, 1)
+
+
+def patch_weather_face(text):
+    import re
+    marker = '// BEGIN serpantinum-addons-v2 weather city obfuscation'
+    anchor = '                        text: Location.city && Location.city !== "" ? Location.city : (root.weatherData && root.weatherData.city ? root.weatherData.city : "Unknown")'
+    replacement = '''                        // BEGIN serpantinum-addons-v2 weather city obfuscation
+                        property string cityName: Location.city && Location.city !== "" ? Location.city : (root.weatherData && root.weatherData.city ? root.weatherData.city : "Unknown")
+                        property string obfuscatedCity: ""
+
+                        function reshuffleCity() {
+                            const glyphs = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&*+-=?@"
+                            let scrambled = ""
+                            for (let i = 0; i < cityName.length; i++) {
+                                scrambled += glyphs.charAt(Math.floor(Math.random() * glyphs.length))
+                            }
+                            obfuscatedCity = scrambled
+                        }
+
+                        Component.onCompleted: reshuffleCity()
+                        onCityNameChanged: reshuffleCity()
+                        onVisibleChanged: if (visible) reshuffleCity()
+
+                        Timer {
+                            interval: 90
+                            repeat: true
+                            running: Config.getSetting("addonsV2ObfuscateWeatherCity", false) && root.visible
+                            onTriggered: parent.reshuffleCity()
+                        }
+
+                        text: Config.getSetting("addonsV2ObfuscateWeatherCity", false) ? (obfuscatedCity || "••••••••") : cityName
+                        // END serpantinum-addons-v2 weather city obfuscation'''
+    pattern = re.compile(r'(?m)^[ \t]*// BEGIN serpantinum-addons-v2 weather city obfuscation\n.*?^[ \t]*// END serpantinum-addons-v2 weather city obfuscation\n?', re.S)
+    matches = list(pattern.finditer(text))
+    if matches:
+        if len(matches) != 1: raise ValueError('Weather city patch markers are duplicated')
+        return pattern.sub(replacement, text, count=1)
+    if text.count(anchor) != 1: raise ValueError('Weather city label anchor changed')
+    return text.replace(anchor, replacement, 1)
 
 
 def patch_theme(text):
@@ -229,7 +273,7 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = 
 
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
-    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen}
+    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
     pending[keybind_path] = patch_keybinds(keybind_path.read_text())

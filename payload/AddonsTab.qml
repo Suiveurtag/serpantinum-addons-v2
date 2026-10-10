@@ -81,6 +81,15 @@ Item {
                 }
             }
             SettingsRow {
+                rootObj: root.rootObj; settingId: "addons_weather_city_obfuscation"; searchTab: "addons"; searchKeywords: "weather city location privacy obfuscated météo ville localisation"
+                title: "Obfuscate weather location"; description: "Scramble the city name in the weather widget."; icon: "󰖟"
+                Toggle {
+                    checked: Config.getSetting("addonsV2ObfuscateWeatherCity", false)
+                    accentColor: ThemeBackend.mauve
+                    onToggled: { Config.setSetting("addonsV2ObfuscateWeatherCity", checked); }
+                }
+            }
+            SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_mullvad_dns"; searchTab: "addons"; searchKeywords: "dns mullvad network privacy"
                 title: "Mullvad DNS"; icon: "󰖟"
                 description: dns.errorMessage || (dns.connectionName ? "DNS over TLS · " + dns.connectionName : "Connect to a network to change its DNS.")

@@ -35,8 +35,23 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(patched, installer.patch_guide(patched))
         model = patched[patched.index('property var tabsModel:'):patched.index('    StackView.onStatusChanged:')]
         self.assertLess(model.index('id: "Keybinds"'), model.index('id: "About"'))
-        self.assertEqual(patched.count('id: tabAddonMonitors\n'), 1)
-        self.assertIn('tabAddonAddons, tabAddonMonitors, tabAddonKeybinds, tabAbout', patched)
+        self.assertIn('id: "Addons"', model)
+        if '                                Rectangle {\n                                    id: tabAbout' in patched:
+            self.assertEqual(patched.count('id: tabAddonMonitors\n'), 1)
+            self.assertIn('tabAddonAddons, tabAddonMonitors, tabAddonKeybinds, tabAbout', patched)
+
+    def test_addons_options_and_weather_patch_preserve_each_other(self):
+        addons = (ROOT/'payload/AddonsTab.qml').read_text()
+        for option in ('HalloweenCard', 'addons_trackpad_speed', 'addons_trackpad_typing',
+                       'addons_trackpad_clicks_typing', 'addonsV2ObfuscateWeatherCity'):
+            with self.subTest(option=option):
+                self.assertIn(option, addons)
+
+        weather_path = installer.QS/'widgets/faces/weather/WeatherFaceFull.qml'
+        weather = installer.patch_weather_face(weather_path.read_text())
+        self.assertIn('reshuffleCity()', weather)
+        self.assertIn('interval: 90', weather)
+        self.assertEqual(weather, installer.patch_weather_face(weather))
 
     def test_theme_uses_original_tile_delegate(self):
         text = (installer.QS/'guide/theme/ThemeTab.qml').read_text()
