@@ -46,6 +46,11 @@ class ChangeTests(unittest.TestCase):
                        'addons_trackpad_clicks_typing', 'addonsV2ObfuscateWeatherCity'):
             with self.subTest(option=option):
                 self.assertIn(option, addons)
+        self.assertIn('SettingsGroup {', addons)
+        self.assertIn('spacing: rootObj.s(8)', addons)
+        self.assertIn('Layout.bottomMargin: rootObj.s(6)', addons)
+        self.assertIn('opacity: root.noTrackpadDetected ? 0.38 : 1.0', addons)
+        self.assertEqual(addons.count('settingId: "addons_trackpad_'), 3)
 
         weather_path = installer.QS/'widgets/faces/weather/WeatherFaceFull.qml'
         weather = installer.patch_weather_face(weather_path.read_text())

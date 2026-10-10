@@ -23,6 +23,7 @@ Item {
     property string trackpadRevision: ""
     property string trackpadError: ""
     property bool trackpadAvailable: false
+    readonly property bool noTrackpadDetected: trackpadRevision !== "" && !trackpadAvailable
     readonly property bool trackpadEnabled: trackpadAvailable && !trackpadStatus.running && !trackpadApply.running
     function acceptTrackpad(raw, applying) {
         try {
@@ -67,9 +68,9 @@ Item {
     Flickable {
         anchors.fill: parent; anchors.margins: rootObj.s(24); contentWidth: width; contentHeight: settings.implicitHeight; clip: true
         ColumnLayout {
-            id: settings; width: parent.width; spacing: rootObj.s(14)
+            id: settings; width: parent.width; spacing: rootObj.s(8)
             // BEGIN serpantinum-night-v2 option
-            HalloweenCard { rootObj: root.rootObj }
+            HalloweenCard { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-night-v2 option
             SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_legacy_clock"; searchTab: "addons"; searchKeywords: "calendar clock legacy horloge calendrier"
@@ -96,64 +97,73 @@ Item {
                 wrapText: true
                 DnsControl { id: dns; Layout.preferredWidth: root.rootObj.s(170); pollEnabled: root.visible }
             }
-            SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_trackpad_speed"; searchTab: "addons"
-                searchKeywords: "trackpad touchpad speed sensitivity vitesse pavé tactile"
-                title: "Trackpad speed"; icon: "󰟸"; wrapText: true
+            SettingsGroup {
+                rootObj: root.rootObj
+                icon: "󰟸"
+                title: "Trackpad"
                 description: root.trackpadError || (!root.trackpadRevision ? "Loading trackpad settings…" :
-                    !root.trackpadAvailable ? "No trackpad detected." : "Adjust pointer speed for the trackpad.")
-                Draggable {
-                    id: trackpadSpeed
-                    Layout.rightMargin: root.rootObj.s(8)
-                    implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
-                    enabled: root.trackpadEnabled
-                    from: -1; to: 1; stepSize: 0.05; defaultValue: 0
-                    value: root.trackpadSettings.speed
-                    showValueBubble: true
-                    valueFormatter: function(v) { return (v > 0 ? "+" : "") + v.toFixed(2); }
-                    backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
-                    handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
-                    onDragStarted: trackpadDebounce.stop()
-                    onMoved: function(val) {
-                        root.changeTrackpad("speed", Math.round(val * 100) / 100);
-                        if (!isDragging) trackpadDebounce.restart();
+                    !root.trackpadAvailable ? "No trackpad detected." : "Adjust trackpad speed and typing protection.")
+                opacity: root.noTrackpadDetected ? 0.38 : 1.0
+                subSettings: [
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_trackpad_speed"; searchTab: "addons"
+                        searchKeywords: "trackpad touchpad speed sensitivity vitesse pavé tactile"
+                        title: "Trackpad speed"; icon: "󰟸"; wrapText: true
+                        description: "Adjust pointer speed for the trackpad."
+                        Draggable {
+                            id: trackpadSpeed
+                            Layout.rightMargin: root.rootObj.s(8)
+                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
+                            enabled: root.trackpadEnabled
+                            from: -1; to: 1; stepSize: 0.05; defaultValue: 0
+                            value: root.trackpadSettings.speed
+                            showValueBubble: true
+                            valueFormatter: function(v) { return (v > 0 ? "+" : "") + v.toFixed(2); }
+                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
+                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
+                            onDragStarted: trackpadDebounce.stop()
+                            onMoved: function(val) {
+                                root.changeTrackpad("speed", Math.round(val * 100) / 100);
+                                if (!isDragging) trackpadDebounce.restart();
+                            }
+                            onDragFinished: { trackpadDebounce.stop(); root.saveTrackpad(); }
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_trackpad_typing"; searchTab: "addons"
+                        searchKeywords: "trackpad touchpad typing keyboard disable saisie frappe clavier pavé tactile"
+                        title: "Disable trackpad while typing"; icon: "󰌌"; wrapText: true
+                        description: "Use the trackpad's native protection against accidental movement and taps while typing."
+                        Toggle {
+                            enabled: root.trackpadEnabled
+                            checked: root.trackpadSettings.disableWhileTyping
+                            accentColor: ThemeBackend.mauve
+                            onToggled: function(c) {
+                                trackpadDebounce.stop();
+                                root.changeTrackpad("disableWhileTyping", c);
+                                checked = Qt.binding(function() { return root.trackpadSettings.disableWhileTyping; });
+                                root.saveTrackpad();
+                            }
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_trackpad_clicks_typing"; searchTab: "addons"
+                        searchKeywords: "trackpad touchpad clicks tap typing disable saisie frappe clics pavé tactile"
+                        title: "Disable trackpad clicks while typing"; icon: "󰟸"; wrapText: true
+                        description: "Block trackpad clicks during text entry and for 600 ms afterwards. Pointer movement stays available."
+                        Toggle {
+                            enabled: root.trackpadEnabled
+                            checked: root.trackpadSettings.disableClicksWhileTyping
+                            accentColor: ThemeBackend.mauve
+                            onToggled: function(c) {
+                                trackpadDebounce.stop();
+                                root.changeTrackpad("disableClicksWhileTyping", c);
+                                checked = Qt.binding(function() { return root.trackpadSettings.disableClicksWhileTyping; });
+                                root.saveTrackpad();
+                            }
+                        }
                     }
-                    onDragFinished: { trackpadDebounce.stop(); root.saveTrackpad(); }
-                }
-            }
-            SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_trackpad_typing"; searchTab: "addons"
-                searchKeywords: "trackpad touchpad typing keyboard disable saisie frappe clavier pavé tactile"
-                title: "Disable trackpad while typing"; icon: "󰌌"; wrapText: true
-                description: "Use the trackpad's native protection against accidental movement and taps while typing."
-                Toggle {
-                    enabled: root.trackpadEnabled
-                    checked: root.trackpadSettings.disableWhileTyping
-                    accentColor: ThemeBackend.mauve
-                    onToggled: function(c) {
-                        trackpadDebounce.stop();
-                        root.changeTrackpad("disableWhileTyping", c);
-                        checked = Qt.binding(function() { return root.trackpadSettings.disableWhileTyping; });
-                        root.saveTrackpad();
-                    }
-                }
-            }
-            SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_trackpad_clicks_typing"; searchTab: "addons"
-                searchKeywords: "trackpad touchpad clicks tap typing disable saisie frappe clics pavé tactile"
-                title: "Disable trackpad clicks while typing"; icon: "󰟸"; wrapText: true
-                description: "Block trackpad clicks during text entry and for 600 ms afterwards. Pointer movement stays available."
-                Toggle {
-                    enabled: root.trackpadEnabled
-                    checked: root.trackpadSettings.disableClicksWhileTyping
-                    accentColor: ThemeBackend.mauve
-                    onToggled: function(c) {
-                        trackpadDebounce.stop();
-                        root.changeTrackpad("disableClicksWhileTyping", c);
-                        checked = Qt.binding(function() { return root.trackpadSettings.disableClicksWhileTyping; });
-                        root.saveTrackpad();
-                    }
-                }
+                ]
             }
         }
     }
