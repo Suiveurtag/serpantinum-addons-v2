@@ -6,6 +6,7 @@ import json
 import os
 import shlex
 import shutil
+import stat
 import tempfile
 import seasonal
 import seasonal_surfaces
@@ -205,6 +206,113 @@ def patch_shell(text):
     return text.replace(anchor, anchor + addition, 1)
 
 
+def patch_screenshot_overlay(text):
+    marker = '// BEGIN serpantinum-addons-v2 frozen screenshot source'
+    if marker not in text:
+        anchor = '        let cmd = `bash ${Caching.serpantinumDir}/scripts/screenshot.sh --geometry "${root.geometryString}"`;'
+        if text.count(anchor) != 1: raise ValueError('Screenshot capture command anchor changed')
+        block = '''        // BEGIN serpantinum-addons-v2 frozen screenshot source
+        if (!isRecord && root.freezeImg !== "" && root.screen) {
+            const frozenGeometry = `${Math.round(root.selX)},${Math.round(root.selY)} ${Math.round(root.selW)}x${Math.round(root.selH)}`;
+            const frozenSize = `${Math.round(root.screen.width)}x${Math.round(root.screen.height)}`;
+            cmd += ` --frozen-image "${root.freezeImg}" --frozen-geometry "${frozenGeometry}" --frozen-size "${frozenSize}"`;
+        }
+        // END serpantinum-addons-v2 frozen screenshot source
+'''
+        text = text.replace(anchor, anchor + '\n' + block.rstrip(), 1)
+
+    anchor = '    property string freezeImg: ""\n'
+    if '    property string pendingCaptureFreezeImg: ""\n' not in text:
+        if text.count(anchor) != 1: raise ValueError('Screenshot freeze lifecycle anchor changed')
+        text = text.replace(anchor, anchor + '    property string pendingCaptureFreezeImg: ""\n', 1)
+
+    anchor = '            Quickshell.execDetached(["bash", "-c", pendingCmd]);\n'
+    if 'root.pendingCaptureFreezeImg = "";' not in text:
+        if text.count(anchor) != 1: raise ValueError('Screenshot timer anchor changed')
+        text = text.replace(anchor, anchor + '            root.pendingCaptureFreezeImg = "";\n', 1)
+
+    anchor = '        if (root.freezeImg !== "") Quickshell.execDetached(["bash", "-c", "rm -f " + root.freezeImg]);'
+    replacement = '        if (root.freezeImg !== "" && root.freezeImg !== root.pendingCaptureFreezeImg) Quickshell.execDetached(["bash", "-c", "rm -f " + root.freezeImg]);'
+    if anchor in text:
+        text = text.replace(anchor, replacement)
+    elif text.count(replacement) != 2: raise ValueError('Screenshot freeze cleanup anchor changed')
+
+    anchor = '        captureTimer.pendingCmd = cmd;\n'
+    assignment = '        root.pendingCaptureFreezeImg = (!isRecord && root.freezeImg !== "" && root.screen) ? root.freezeImg : "";\n'
+    if assignment not in text:
+        if text.count(anchor) != 1: raise ValueError('Screenshot capture lifecycle anchor changed')
+        text = text.replace(anchor, assignment + anchor, 1)
+    return text
+
+
+def patch_screenshot_script(text):
+    marker = '# BEGIN serpantinum-addons-v2 frozen screenshot source'
+    if marker in text: return text
+    anchor = 'GEOMETRY=""\n'
+    if text.count(anchor) != 1: raise ValueError('Screenshot geometry argument anchor changed')
+    text = text.replace(anchor, anchor + 'FROZEN_IMG=""\nFROZEN_GEOMETRY=""\nFROZEN_SIZE=""\n', 1)
+    anchor = '        --geometry) GEOMETRY="$2"; shift 2 ;;\n'
+    if text.count(anchor) != 1: raise ValueError('Screenshot argument parser anchor changed')
+    text = text.replace(anchor, anchor + '''        --frozen-image) FROZEN_IMG="$2"; shift 2 ;;
+        --frozen-geometry) FROZEN_GEOMETRY="$2"; shift 2 ;;
+        --frozen-size) FROZEN_SIZE="$2"; shift 2 ;;
+''', 1)
+    anchor = '''    if [ -n "$GEOMETRY" ]; then
+        grim -l 0 -g "$GEOMETRY" "$TMP_SCREENSHOT"
+    elif [ -n "$TARGET_MON" ]; then
+'''
+    if text.count(anchor) != 1: raise ValueError('Screenshot region capture anchor changed')
+    replacement = '''    if [ -n "$FROZEN_IMG" ] && [ -f "$FROZEN_IMG" ] && [ -n "$FROZEN_GEOMETRY" ] && [ -n "$FROZEN_SIZE" ]; then
+        ADDON_SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/serpantinum-addons-v2/scripts"
+        python3 "$ADDON_SCRIPT_DIR/crop_frozen_screenshot.py" "$FROZEN_IMG" "$FROZEN_GEOMETRY" "$FROZEN_SIZE" "$TMP_SCREENSHOT"
+    elif [ -n "$GEOMETRY" ]; then
+        grim -l 0 -g "$GEOMETRY" "$TMP_SCREENSHOT"
+    elif [ -n "$TARGET_MON" ]; then
+'''
+    text = text.replace(anchor, replacement, 1)
+    return text.replace('    if [ -n "$FROZEN_IMG" ]', marker + '\n    if [ -n "$FROZEN_IMG" ]', 1).replace('        rm -f "$TMP_SCREENSHOT"\n', '        rm -f "$TMP_SCREENSHOT"\n    # END serpantinum-addons-v2 frozen screenshot source\n', 1)
+
+
+def patch_screenshot_cleanup(text):
+    marker = '# BEGIN serpantinum-addons-v2 frozen screenshot cleanup'
+    if marker in text: return text
+    anchor = 'done\n\nexport XDG_RUNTIME_DIR='
+    if text.count(anchor) != 1: raise ValueError('Screenshot cleanup trap anchor changed')
+    cleanup = '''done
+
+# BEGIN serpantinum-addons-v2 frozen screenshot cleanup
+if [ -n "$FROZEN_IMG" ]; then
+    trap 'rm -f -- "$FROZEN_IMG"' EXIT
+fi
+# END serpantinum-addons-v2 frozen screenshot cleanup
+
+export XDG_RUNTIME_DIR='''
+    return text.replace(anchor, cleanup, 1)
+
+
+def patch_screenshot_frozen_validation(text):
+    old = '''# BEGIN serpantinum-addons-v2 frozen screenshot source
+    if [ -n "$FROZEN_IMG" ] && [ -f "$FROZEN_IMG" ] && [ -n "$FROZEN_GEOMETRY" ] && [ -n "$FROZEN_SIZE" ]; then
+        ADDON_SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/serpantinum-addons-v2/scripts"
+        python3 "$ADDON_SCRIPT_DIR/crop_frozen_screenshot.py" "$FROZEN_IMG" "$FROZEN_GEOMETRY" "$FROZEN_SIZE" "$TMP_SCREENSHOT"
+    elif [ -n "$GEOMETRY" ]; then
+'''
+    new = '''# BEGIN serpantinum-addons-v2 frozen screenshot source
+    if [ -n "$FROZEN_IMG" ]; then
+        if [ -f "$FROZEN_IMG" ] && [ -n "$FROZEN_GEOMETRY" ] && [ -n "$FROZEN_SIZE" ]; then
+            ADDON_SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/serpantinum-addons-v2/scripts"
+            python3 "$ADDON_SCRIPT_DIR/crop_frozen_screenshot.py" "$FROZEN_IMG" "$FROZEN_GEOMETRY" "$FROZEN_SIZE" "$TMP_SCREENSHOT" || exit 1
+        else
+            echo "Frozen screenshot source or selection geometry is missing" >&2
+            exit 1
+        fi
+    elif [ -n "$GEOMETRY" ]; then
+'''
+    if new in text: return text
+    if text.count(old) != 1: raise ValueError('Frozen screenshot validation anchor changed')
+    return text.replace(old, new, 1)
+
+
 def patch_floating(text):
     marker = '                                // BEGIN serpantinum-addons-v2 picker action\n'
     if marker in text:
@@ -273,8 +381,10 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = 
 
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
-    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
+    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
+    screenshot_script = QS.parent/'scripts/screenshot.sh'
+    pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
     pending[keybind_path] = patch_keybinds(keybind_path.read_text())
     for path, transform in seasonal.transformations(QS).items():
@@ -322,13 +432,19 @@ def install(without_halloween=False):
     backup = DEPLOY/'backups'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     changed = 0
     for path, text in pending.items():
-        if path.is_file() and path.read_text() == text: continue
+        mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
+        if path == screenshot_script: mode |= 0o755
+        if path.is_file() and path.read_text() == text and stat.S_IMODE(path.stat().st_mode) == mode: continue
         backup.mkdir(parents=True, exist_ok=True)
         if path.exists():
-            relative = Path('hypr/keybinds.lua') if path == keybind_path else path.relative_to(QS)
+            if path == keybind_path: relative = Path('hypr/keybinds.lua')
+            else:
+                try: relative = path.relative_to(QS)
+                except ValueError: relative = path.relative_to(QS.parent)
             saved = backup/relative; saved.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, saved)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=path.parent, prefix='.'+path.name)
+        os.fchmod(fd, mode)
         with os.fdopen(fd, 'w') as f: f.write(text)
         os.replace(name, path); changed += 1
     # Binary shader packages are versioned beside readable GLSL sources.
@@ -342,8 +458,10 @@ def install(without_halloween=False):
         backup.mkdir(parents=True, exist_ok=True)
         if path.exists():
             saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, saved)
+        mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=path.parent, prefix='.'+path.name)
+        os.fchmod(fd, mode)
         with os.fdopen(fd, 'wb') as stream: stream.write(blob)
         os.replace(name, path); changed += 1
     # Qt caches GPU programs by URL across hot reloads. Keep only the package
