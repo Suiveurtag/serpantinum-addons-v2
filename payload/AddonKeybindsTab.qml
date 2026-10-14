@@ -41,6 +41,39 @@ Item {
     property var dispatchers: ["exec"]
     ListModel { id: dynamicKeybindsModel }
     function clearHighlight() { highlightedBox = -1; }
+    function recordedKey(event) {
+        const special = {};
+        special[Qt.Key_Space] = "SPACE";
+        special[Qt.Key_Return] = "RETURN";
+        special[Qt.Key_Enter] = "KP_Enter";
+        special[Qt.Key_Tab] = "TAB";
+        special[Qt.Key_Backtab] = "TAB";
+        special[Qt.Key_Print] = "Print";
+        special[Qt.Key_Left] = "Left";
+        special[Qt.Key_Right] = "Right";
+        special[Qt.Key_Up] = "Up";
+        special[Qt.Key_Down] = "Down";
+        special[Qt.Key_Backspace] = "BackSpace";
+        special[Qt.Key_Delete] = "Delete";
+        special[Qt.Key_Insert] = "Insert";
+        special[Qt.Key_Home] = "Home";
+        special[Qt.Key_End] = "End";
+        special[Qt.Key_PageUp] = "Prior";
+        special[Qt.Key_PageDown] = "Next";
+        special[Qt.Key_Pause] = "Pause";
+        special[Qt.Key_Dead_Grave] = "dead_grave";
+        special[Qt.Key_Dead_Acute] = "dead_acute";
+        special[Qt.Key_Dead_Circumflex] = "dead_circumflex";
+        special[Qt.Key_Dead_Tilde] = "dead_tilde";
+        special[Qt.Key_Dead_Diaeresis] = "dead_diaeresis";
+        if (special[event.key]) return special[event.key];
+        if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F35) return "F" + (event.key - Qt.Key_F1 + 1);
+        // Ctrl+letter often has a control character in event.text. Use the key.
+        if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z) return String.fromCharCode(event.key);
+        if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32) return event.text;
+        return "";
+    }
+
     function loadData(data) {
         revision = data.revision;
         dynamicKeybindsModel.clear();
@@ -408,18 +441,12 @@ Item {
                                                     captureTrap.accumulatedMods = mergedMods;
                                                     return;
                                                 }
-                                                let k = "";
-                                                if (event.key === Qt.Key_Space) k = "SPACE";
-                                                else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) k = "RETURN";
-                                                else if (event.key === Qt.Key_Tab) k = "TAB";
-                                                else if (event.key === Qt.Key_Print) k = "Print";
-                                                else if (event.key === Qt.Key_Left) k = "left";
-                                                else if (event.key === Qt.Key_Right) k = "right";
-                                                else if (event.key === Qt.Key_Up) k = "up";
-                                                else if (event.key === Qt.Key_Down) k = "down";
-                                                else if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F35) { k = "F" + (event.key - Qt.Key_F1 + 1); }
-                                                else if (event.text && event.text.length > 0) k = event.text.toUpperCase();
-                                                else k = event.key.toString();
+                                                let k = root.recordedKey(event);
+                                                if (!k) {
+                                                    root.errorMessage = "This key cannot be recorded. Choose another key.";
+                                                    return;
+                                                }
+                                                root.errorMessage = "";
                                                 captureTrap.accumulatedMods = newMods;
                                                 dynamicKeybindsModel.setProperty(outerIndex, "mods", newMods.join(" "));
                                                 captureTrap.accumulatedKey = k;

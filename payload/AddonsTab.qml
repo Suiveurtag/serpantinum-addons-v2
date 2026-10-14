@@ -72,6 +72,87 @@ Item {
             // BEGIN serpantinum-night-v2 option
             HalloweenCard { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-night-v2 option
+            SettingsGroup {
+                rootObj: root.rootObj; title: "Mouse spotlight"; icon: "󰍽"
+                description: "Animated pointer highlight"
+                subSettings: [
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_mouse_spotlight"; searchTab: "addons"
+                        searchKeywords: "mouse spotlight pointer cursor souris curseur powertoys raccourci"
+                        title: "Mouse spotlight"; icon: "󰍽"; wrapText: true
+                        description: "Highlight the pointer with an animated spotlight. Search addonMouseSpotlight in Keybinds to edit or record its shortcut. Click, press Escape or use the shortcut again to dismiss. Scroll to resize the circle."
+                        ClickButton {
+                            buttonText: "Shortcut"; accentColor: ThemeBackend.surface1; textColor: ThemeBackend.text
+                            visible: typeof root.rootObj.gotoTab === "function"
+                            onClicked: root.rootObj.gotoTab("addon_keybinds")
+                        }
+                        ClickButton {
+                            buttonText: "Try spotlight"; accentColor: ThemeBackend.mauve; textColor: ThemeBackend.crust
+                            onClicked: Quickshell.execDetached(["quickshell", "-p", Caching.mainQml, "ipc", "call", "addonMouseSpotlight", "toggle"])
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_spotlight_radius"; searchTab: "addons"
+                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
+                        title: "Circle size"; description: "Radius of the spotlight. The mouse wheel also adjusts and saves this size."; icon: "󰍽"; wrapText: true
+                        Draggable {
+                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
+                            from: 35; to: 350; stepSize: 5
+                            value: Config.getSetting("addonsV2SpotlightRadius", 95)
+                            showValueBubble: true
+                            valueFormatter: function(v) { return Math.round(v) + " px"; }
+                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
+                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
+                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightRadius", Math.round(val)); }
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_spotlight_brightness"; searchTab: "addons"
+                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
+                        title: "Background brightness"; description: "Brightness outside the spotlight: 0% is black, 100% leaves the desktop unchanged."; icon: "󰍽"; wrapText: true
+                        Draggable {
+                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
+                            from: 0; to: 100; stepSize: 1
+                            value: (1 - Config.getSetting("addonsV2SpotlightDimming", 0.65)) * 100
+                            showValueBubble: true
+                            valueFormatter: function(v) { return Math.round(v) + "%"; }
+                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
+                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
+                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightDimming", 1 - val / 100); }
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_spotlight_entrance"; searchTab: "addons"
+                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
+                        title: "Entrance animation"; description: "Duration of the fade-in and circle convergence."; icon: "󰍽"; wrapText: true
+                        Draggable {
+                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
+                            from: 100; to: 1600; stepSize: 50
+                            value: Config.getSetting("addonsV2SpotlightEntrance", 650)
+                            showValueBubble: true
+                            valueFormatter: function(v) { return Math.round(v) + " ms"; }
+                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
+                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
+                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightEntrance", Math.round(val)); }
+                        }
+                    },
+                    SettingsRow {
+                        rootObj: root.rootObj; settingId: "addons_spotlight_exit"; searchTab: "addons"
+                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
+                        title: "Exit animation"; description: "Duration of the smooth fade-out and circle expansion."; icon: "󰍽"; wrapText: true
+                        Draggable {
+                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
+                            from: 100; to: 2000; stepSize: 50
+                            value: Config.getSetting("addonsV2SpotlightExit", 800)
+                            showValueBubble: true
+                            valueFormatter: function(v) { return Math.round(v) + " ms"; }
+                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
+                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
+                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightExit", Math.round(val)); }
+                        }
+                    }
+                ]
+            }
             SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_legacy_clock"; searchTab: "addons"; searchKeywords: "calendar clock legacy horloge calendrier"
                 title: "Legacy clock design"; description: "Restore the v1 calendar and clock panel."; icon: "󰥔"

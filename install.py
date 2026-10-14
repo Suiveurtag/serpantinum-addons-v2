@@ -34,6 +34,34 @@ def shader_package_name(folder):
 
 def patch_guide(text):
     import re
+    # v2.2.8 moved guide navigation and content into a model-driven loader.
+    # Register addon tabs in that model so upstream handles the sidebar and content.
+    if 'property var tabsModel: [' in text:
+        if '// BEGIN serpantinum-addons-v2 tabs' not in text:
+            anchor = '        { id: "About", key: "about", name: "About", icon: "󰋽", file: "AboutTab.qml", iconOffsetX: 0 }'
+            if text.count(anchor) != 1: raise ValueError('Guide tabs model anchor changed')
+            block = '''        // BEGIN serpantinum-addons-v2 tabs
+        { id: "Addons", key: "addons", name: "Addons", icon: "󰐱", file: "AddonsTab.qml", iconOffsetX: 0 },
+        { id: "Monitors", key: "addon_monitors", name: "Monitors", icon: "󰍹", file: "AddonMonitorsTab.qml", iconOffsetX: 0 },
+        { id: "Keybinds", key: "addon_keybinds", name: "Keybinds", icon: "󰌌", file: "AddonKeybindsTab.qml", iconOffsetX: 0 },
+        // END serpantinum-addons-v2 tabs
+'''
+            text = text.replace(anchor, block + anchor, 1)
+        old = '                return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
+        new = '''                let key = "guide.tabs." + (t.key || t.id).toLowerCase();
+                let label = I18n.t(key);
+                return label === key ? (t.name || t.id) : label;'''
+        if old in text:
+            text = text.replace(old, new, 1)
+        elif new not in text:
+            raise ValueError('Guide tab title fallback anchor changed')
+        old = 'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)'
+        new = 'text: root.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)'
+        if old in text:
+            text = text.replace(old, new, 1)
+        elif new not in text:
+            raise ValueError('Guide sidebar title anchor changed')
+        return text
     # Migrate our first revision while leaving every upstream tab intact.
     text = re.sub(r'        // BEGIN serpantinum-addons-v2 tabs.*?        // END serpantinum-addons-v2 tabs[\s,]*(?=    \])', '', text, flags=re.S)
     text = re.sub(r'\n                                // BEGIN serpantinum-addons-v2 sidebar.*?                                // END serpantinum-addons-v2 sidebar\n', '', text, flags=re.S)
@@ -181,6 +209,7 @@ def patch_theme(text):
 def patch_matugen(text):
     if '// BEGIN ' + MARK + ' generation' in text: return text
     anchor = '''        matugenProcess.command = [
+            "nice", "-n", "15",
             "matugen", "image", cleanPath,
             "-c", root.configPath,
             "-m", selectedMode,
@@ -190,6 +219,7 @@ def patch_matugen(text):
     if text.count(anchor) != 1: raise ValueError('Matugen command anchor changed')
     replacement = '''        // BEGIN serpantinum-addons-v2 generation
         matugenProcess.command = [
+            "nice", "-n", "15",
             "python3", Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/colors.py",
             cleanPath, root.configPath, root.configPathStatic, selectedMode, selectedType,
             Config.getSetting("addonsV2ColorMode", "matugen"), Caching.stateDir
@@ -201,9 +231,12 @@ def patch_matugen(text):
 def patch_shell(text):
     anchor = '    ScreenshotOverlay {}\n'
     addition = '    // BEGIN serpantinum-addons-v2 color picker\n    AddonColorPicker {}\n    // END serpantinum-addons-v2 color picker\n'
-    if addition in text: return text
-    if text.count(anchor) != 1: raise ValueError('Shell screenshot anchor changed')
-    return text.replace(anchor, anchor + addition, 1)
+    if addition not in text:
+        if text.count(anchor) != 1: raise ValueError('Shell screenshot anchor changed')
+        text = text.replace(anchor, anchor + addition, 1)
+    spotlight = '    // BEGIN serpantinum-addons-v2 mouse spotlight\n    AddonMouseSpotlight {}\n    // END serpantinum-addons-v2 mouse spotlight\n'
+    if spotlight not in text: text = text.replace(addition, addition + spotlight, 1)
+    return text
 
 
 def patch_screenshot_overlay(text):
@@ -379,6 +412,15 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = 
     return text.replace(anchor, anchor + addition, 1)
 
 
+def patch_spotlight_keybind(text):
+    # Preserve user edits and deletions inside the managed block on reinstall.
+    marker = '-- BEGIN serpantinum-addons-v2 mouse spotlight'
+    if marker in text: return text
+    if '"SUPER + SHIFT + M"' in text: raise ValueError('Mouse spotlight shortcut already in use')
+    command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonMouseSpotlight toggle'
+    return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 mouse spotlight\n'
+
+
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
@@ -386,11 +428,11 @@ def install(without_halloween=False):
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
-    pending[keybind_path] = patch_keybinds(keybind_path.read_text())
+    pending[keybind_path] = patch_spotlight_keybind(patch_keybinds(keybind_path.read_text()))
     for path, transform in seasonal.transformations(QS).items():
         text = pending.get(path, path.read_text())
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
-    payloads = {'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    payloads = {'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
     # NativeCalendar is captured before installing the wrapper, then patched in
     # memory. The native UI remains the source of truth for both seasonal states.
@@ -408,8 +450,12 @@ def install(without_halloween=False):
     # Both tabs use the same DNS component; identical payload with appropriate relative imports.
     pending[QS/'guide/DnsControl.qml'] = (SOURCE/'payload/DnsControl.qml').read_text()
     qmldir = QS/'qmldir'
-    qmldir_text = qmldir.read_text()
+    # Seasonal transformation registers its QML types in the root qmldir above.
+    # Extend that pending result instead of replacing it with the addon's entry.
+    qmldir_text = pending.get(qmldir, qmldir.read_text())
     pending[qmldir] = qmldir_text if 'AddonColorPicker 1.0 AddonColorPicker.qml' in qmldir_text else qmldir_text + '\nAddonColorPicker 1.0 AddonColorPicker.qml\n'
+    if 'AddonMouseSpotlight 1.0 AddonMouseSpotlight.qml' not in pending[qmldir]:
+        pending[qmldir] += '\nAddonMouseSpotlight 1.0 AddonMouseSpotlight.qml\n'
     for folder in ('guide', 'network'):
         directory = QS/folder/'qmldir'
         original = directory.read_text() if directory.exists() else ''
