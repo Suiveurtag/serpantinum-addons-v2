@@ -120,36 +120,6 @@ Item {
                             handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
                             onMoved: function(val) { Config.setSetting("addonsV2SpotlightDimming", 1 - val / 100); }
                         }
-                    },
-                    SettingsRow {
-                        rootObj: root.rootObj; settingId: "addons_spotlight_entrance"; searchTab: "addons"
-                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
-                        title: "Entrance animation"; description: "Duration of the fade-in and circle convergence."; icon: "󰍽"; wrapText: true
-                        Draggable {
-                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
-                            from: 100; to: 1600; stepSize: 50
-                            value: Config.getSetting("addonsV2SpotlightEntrance", 650)
-                            showValueBubble: true
-                            valueFormatter: function(v) { return Math.round(v) + " ms"; }
-                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
-                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
-                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightEntrance", Math.round(val)); }
-                        }
-                    },
-                    SettingsRow {
-                        rootObj: root.rootObj; settingId: "addons_spotlight_exit"; searchTab: "addons"
-                        searchKeywords: "mouse spotlight souris cercle luminosité animation"
-                        title: "Exit animation"; description: "Duration of the smooth fade-out and circle expansion."; icon: "󰍽"; wrapText: true
-                        Draggable {
-                            implicitWidth: root.rootObj.s(180); implicitHeight: root.rootObj.s(18)
-                            from: 100; to: 2000; stepSize: 50
-                            value: Config.getSetting("addonsV2SpotlightExit", 800)
-                            showValueBubble: true
-                            valueFormatter: function(v) { return Math.round(v) + " ms"; }
-                            backgroundColor: ThemeBackend.surface0; accentColor: ThemeBackend.mauve
-                            handleColor: ThemeBackend.text; handleBorderColor: ThemeBackend.mantle
-                            onMoved: function(val) { Config.setSetting("addonsV2SpotlightExit", Math.round(val)); }
-                        }
                     }
                 ]
             }
