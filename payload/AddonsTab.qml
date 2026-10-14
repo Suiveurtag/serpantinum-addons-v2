@@ -18,6 +18,7 @@ Item {
     transform: Translate { y: root.slideY }
     Behavior on opacity { NumberAnimation { duration: 250 } }
     readonly property string trackpadBackend: Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/trackpad.py"
+    readonly property string mouseAccelerationBackend: Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/mouse_acceleration.py"
     property var trackpadSettings: ({speed: 0, disableWhileTyping: false, disableClicksWhileTyping: false})
     property var trackpadDevices: []
     property string trackpadRevision: ""
@@ -25,6 +26,10 @@ Item {
     property bool trackpadAvailable: false
     readonly property bool noTrackpadDetected: trackpadRevision !== "" && !trackpadAvailable
     readonly property bool trackpadEnabled: trackpadAvailable && !trackpadStatus.running && !trackpadApply.running
+    property bool mouseAccelerationEnabled: false
+    property string mouseAccelerationRevision: ""
+    property string mouseAccelerationError: ""
+    readonly property bool mouseAccelerationBusy: mouseAccelerationStatus.running || mouseAccelerationApply.running
     function acceptTrackpad(raw, applying) {
         try {
             let result = JSON.parse(raw);
@@ -52,6 +57,25 @@ Item {
         })];
         trackpadApply.running = true;
     }
+    function acceptMouseAcceleration(raw, applying) {
+        try {
+            let result = JSON.parse(raw);
+            if (!result.ok) throw new Error(result.error);
+            mouseAccelerationEnabled = result.data.enabled;
+            mouseAccelerationRevision = result.data.revision;
+            if (applying) mouseAccelerationError = "";
+        } catch (e) { mouseAccelerationError = String(e); }
+    }
+    function refreshMouseAcceleration() {
+        if (!mouseAccelerationBusy) mouseAccelerationStatus.running = true;
+    }
+    function saveMouseAcceleration(enabled) {
+        if (mouseAccelerationBusy || !mouseAccelerationRevision) return;
+        mouseAccelerationApply.command = ["python3", mouseAccelerationBackend, "save", JSON.stringify({
+            enabled: enabled, revision: mouseAccelerationRevision
+        })];
+        mouseAccelerationApply.running = true;
+    }
     Process {
         id: trackpadStatus
         command: ["python3", root.trackpadBackend, "status"]
@@ -62,9 +86,24 @@ Item {
         stdout: StdioCollector { onStreamFinished: root.acceptTrackpad(text, true) }
         onExited: (exitCode, exitStatus) => { if (exitCode !== 0) root.refreshTrackpad(); }
     }
+    Process {
+        id: mouseAccelerationStatus
+        command: ["python3", root.mouseAccelerationBackend, "status"]
+        stdout: StdioCollector { onStreamFinished: root.acceptMouseAcceleration(text, false) }
+    }
+    Process {
+        id: mouseAccelerationApply
+        stdout: StdioCollector { onStreamFinished: root.acceptMouseAcceleration(text, true) }
+        onExited: (exitCode, exitStatus) => { if (exitCode !== 0) root.refreshMouseAcceleration(); }
+    }
     Timer { id: trackpadDebounce; interval: 350; onTriggered: root.saveTrackpad() }
-    onVisibleChanged: { if (visible) refreshTrackpad(); }
-    Component.onCompleted: refreshTrackpad()
+    onVisibleChanged: {
+        if (visible) {
+            refreshTrackpad();
+            refreshMouseAcceleration();
+        }
+    }
+    Component.onCompleted: { refreshTrackpad(); refreshMouseAcceleration(); }
     Flickable {
         anchors.fill: parent; anchors.margins: rootObj.s(24); contentWidth: width; contentHeight: settings.implicitHeight; clip: true
         ColumnLayout {
@@ -147,6 +186,23 @@ Item {
                 description: dns.errorMessage || (dns.connectionName ? "DNS over TLS · " + dns.connectionName : "Connect to a network to change its DNS.")
                 wrapText: true
                 DnsControl { id: dns; Layout.preferredWidth: root.rootObj.s(170); pollEnabled: root.visible }
+            }
+            SettingsRow {
+                rootObj: root.rootObj; settingId: "addons_mouse_acceleration"; searchTab: "addons"
+                searchKeywords: "mouse pointer acceleration speed souris accélération pointeur"
+                title: "Mouse acceleration"; icon: "󰍽"; wrapText: true
+                description: root.mouseAccelerationError || (root.mouseAccelerationRevision ?
+                    (root.mouseAccelerationEnabled ? "Adaptive acceleration is enabled." : "Acceleration is disabled.") :
+                    "Loading mouse settings…")
+                Toggle {
+                    enabled: !!root.mouseAccelerationRevision && !root.mouseAccelerationBusy
+                    checked: root.mouseAccelerationEnabled
+                    accentColor: ThemeBackend.mauve
+                    onToggled: function(checkedValue) {
+                        root.saveMouseAcceleration(checkedValue);
+                        checked = Qt.binding(function() { return root.mouseAccelerationEnabled; });
+                    }
+                }
             }
             SettingsGroup {
                 rootObj: root.rootObj

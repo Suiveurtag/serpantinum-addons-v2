@@ -6,6 +6,7 @@ Focused addons for the native Serpantinum Settings/Guide, independent of the ret
 
 - Addons: opt-in legacy calendar/clock and Mullvad DNS.
 - Trackpad (in Addons): pointer-speed slider, native disable-while-typing protection, and a separate click guard during text entry. Uses the existing SettingsRow, Draggable and Toggle components.
+- Mouse (in Addons): toggle adaptive pointer acceleration on or off for mice, persisted in a dedicated Hyprland Lua config fragment.
 - Halloween night: one live switch for smoked burgundy surfaces, moving Settings mist, panel hearths, responsive webs, celestial engravings, energy around controls and repeating bat escapes on important hovers. Music gets an audio-reactive corona, system controls get conductive currents, widgets get effects matched to their face, and the network panel gets luminous transmissions along its existing orbital links. OFF unloads effects while preserving the selected theme. Halloween Night is a separate preset in Settings → Themes, with the supplied moon artwork. Directional panel/launcher arrivals, visible background crossings, modular bar charms, candlelit notifications and a finite eclipse intro extend the effects. See [design and validation](docs/halloween.md).
 - Network: the same DNS switch, reflecting the active connection.
 - Monitors: recovered v1 screen placement and snapping, resolution cards, rotation dial and refresh-rate slider, with native Guide scaling and an exact-coordinate alternative.
@@ -28,6 +29,8 @@ Vibrant selects actual sampled wallpaper colors as accents. Vivid retains their 
 ## Validation
 
 Trackpad changes apply immediately and persist in `~/.config/hypr/config/serpantinum_trackpad.lua`, loaded at the end of `hyprland.lua`. The three settings are kept in the adjacent JSON file. Only devices classified as touchpads by udev are configured; mice and TrackPoints are unaffected. Changes are backed up and rolled back if Hyprland reports a configuration error.
+
+Mouse acceleration switches between Hyprland's `adaptive` and `flat` acceleration profiles. The selected profile persists in `~/.config/hypr/config/serpantinum_mouse_acceleration.lua` and applies after a Hyprland config reload.
 
 The click guard requires Hyprland's Lua API (0.55+). It consumes left/right/middle trackpad clicks during text entry and for 600 ms after the last release, while leaving pointer motion available. Ctrl/Alt/Super shortcuts are excluded. Keyboard events are handled inside Hyprland without recording text. Existing compositor mouse shortcuts can still run. Native disable-while-typing depends on the touchpad's libinput support; combining both protections also covers physical clicks.
 
