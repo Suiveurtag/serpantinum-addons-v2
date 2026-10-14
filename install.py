@@ -236,6 +236,8 @@ def patch_shell(text):
         text = text.replace(anchor, anchor + addition, 1)
     spotlight = '    // BEGIN serpantinum-addons-v2 mouse spotlight\n    AddonMouseSpotlight {}\n    // END serpantinum-addons-v2 mouse spotlight\n'
     if spotlight not in text: text = text.replace(addition, addition + spotlight, 1)
+    zoom = '    // BEGIN serpantinum-addons-v2 desktop zoom\n    AddonDesktopZoom {}\n    // END serpantinum-addons-v2 desktop zoom\n'
+    if zoom not in text: text = text.replace(addition, addition + zoom, 1)
     return text
 
 
@@ -421,6 +423,14 @@ def patch_spotlight_keybind(text):
     return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 mouse spotlight\n'
 
 
+def patch_zoom_keybind(text):
+    marker = '-- BEGIN serpantinum-addons-v2 desktop zoom'
+    if marker in text: return text
+    if '"SUPER + SHIFT + Z"' in text: raise ValueError('Desktop zoom shortcut already in use')
+    command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom toggle'
+    return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + Z", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 desktop zoom\n'
+
+
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
@@ -428,11 +438,11 @@ def install(without_halloween=False):
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
-    pending[keybind_path] = patch_spotlight_keybind(patch_keybinds(keybind_path.read_text()))
+    pending[keybind_path] = patch_zoom_keybind(patch_spotlight_keybind(patch_keybinds(keybind_path.read_text())))
     for path, transform in seasonal.transformations(QS).items():
         text = pending.get(path, path.read_text())
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
-    payloads = {'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    payloads = {'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
     # NativeCalendar is captured before installing the wrapper, then patched in
     # memory. The native UI remains the source of truth for both seasonal states.
@@ -456,6 +466,8 @@ def install(without_halloween=False):
     pending[qmldir] = qmldir_text if 'AddonColorPicker 1.0 AddonColorPicker.qml' in qmldir_text else qmldir_text + '\nAddonColorPicker 1.0 AddonColorPicker.qml\n'
     if 'AddonMouseSpotlight 1.0 AddonMouseSpotlight.qml' not in pending[qmldir]:
         pending[qmldir] += '\nAddonMouseSpotlight 1.0 AddonMouseSpotlight.qml\n'
+    if 'AddonDesktopZoom 1.0 AddonDesktopZoom.qml' not in pending[qmldir]:
+        pending[qmldir] += '\nAddonDesktopZoom 1.0 AddonDesktopZoom.qml\n'
     for folder in ('guide', 'network'):
         directory = QS/folder/'qmldir'
         original = directory.read_text() if directory.exists() else ''

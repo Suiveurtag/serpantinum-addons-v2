@@ -334,6 +334,7 @@ Item {
 
                     Repeater {
                         model: [
+                            { id: "addons_passive_desktop_zoom", title: "Desktop zoom", icon: "󰍉", keywords: "desktop zoom magnifier loupe souris curseur raccourci addonDesktopZoom", detail: "Super+Shift+Z · Scroll to zoom · Esc to close" },
                             { id: "addons_passive_color_picker", title: "Color picker", icon: "󰈊", keywords: "color picker pipette palette couleur", detail: "Super+Shift+C" },
                             { id: "addons_passive_screenshot", title: "Screenshot tools", icon: "󰹑", keywords: "screenshot capture freeze screenshot tool capture écran image", detail: "Frozen capture fixed · Super+Shift+S" },
                             { id: "addons_passive_monitors", title: "Monitor tools", icon: "󰍹", keywords: "monitor display screen monitors écran", detail: "" },
