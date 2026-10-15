@@ -115,16 +115,16 @@ def patch_idle_tab(text):
         option = '''            SettingsRow {
                 rootObj: idleTabRoot.rootObj
                 settingId: "idle_manual_system_awake"
-                searchKeywords: "keep awake suspend lid closed download network"
+                searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"
                 visible: idleTabRoot.idleEnabled
                 icon: "󰖙"
-                title: "Keep system awake"
+                title: "Codex mode"
                 description: "Also block system suspend and lid-triggered sleep while Do Not Disturb is enabled."
                 titleBadge: Component {
                     Rectangle {
                         implicitWidth: addonBadgeText.implicitWidth + rootObj.s(12)
                         implicitHeight: rootObj.s(18)
-                        radius: rootObj.s(4)
+                        radius: ThemeBackend.borderRadius
                         color: Qt.alpha(ThemeBackend.mauve, 0.15)
                         border.color: Qt.alpha(ThemeBackend.mauve, 0.4)
                         border.width: 1
@@ -160,13 +160,16 @@ def patch_idle_tab(text):
         option_end = text.find('            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)', option_start)
         if option_start < 0 or option_end < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
         option = text[option_start:option_end]
+        option = option.replace('searchKeywords: "keep awake suspend lid closed download network"', 'searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"', 1)
+        option = option.replace('title: "Keep system awake"', 'title: "Codex mode"', 1)
         option = option.replace('                icon: "󰒲"', '                icon: "󰖙"', 1)
+        option = option.replace('radius: rootObj.s(4)', 'radius: ThemeBackend.borderRadius', 1)
         if 'id: addonBadgeText' not in option:
             badge = """                titleBadge: Component {
                     Rectangle {
                         implicitWidth: addonBadgeText.implicitWidth + rootObj.s(12)
                         implicitHeight: rootObj.s(18)
-                        radius: rootObj.s(4)
+                        radius: ThemeBackend.borderRadius
                         color: Qt.alpha(ThemeBackend.mauve, 0.15)
                         border.color: Qt.alpha(ThemeBackend.mauve, 0.4)
                         border.width: 1
