@@ -117,9 +117,29 @@ def patch_idle_tab(text):
                 settingId: "idle_manual_system_awake"
                 searchKeywords: "keep awake suspend lid closed download network"
                 visible: idleTabRoot.idleEnabled
-                icon: "󰒲"
+                icon: "󰖙"
                 title: "Keep system awake"
                 description: "Also block system suspend and lid-triggered sleep while Do Not Disturb is enabled."
+                titleBadge: Component {
+                    Rectangle {
+                        implicitWidth: addonBadgeText.implicitWidth + rootObj.s(12)
+                        implicitHeight: rootObj.s(18)
+                        radius: rootObj.s(4)
+                        color: Qt.alpha(ThemeBackend.mauve, 0.15)
+                        border.color: Qt.alpha(ThemeBackend.mauve, 0.4)
+                        border.width: 1
+
+                        Text {
+                            id: addonBadgeText
+                            anchors.centerIn: parent
+                            text: "Addon"
+                            font.family: ThemeBackend.fontFamily
+                            font.pixelSize: rootObj.s(10)
+                            font.bold: true
+                            color: ThemeBackend.mauve
+                        }
+                    }
+                }
 
                 Toggle {
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
@@ -135,6 +155,39 @@ def patch_idle_tab(text):
 
 '''
         text = text.replace(anchor, option + anchor, 1)
+    else:
+        option_start = text.rfind('            SettingsRow {', 0, text.index(marker))
+        option_end = text.find('            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)', option_start)
+        if option_start < 0 or option_end < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
+        option = text[option_start:option_end]
+        option = option.replace('                icon: "󰒲"', '                icon: "󰖙"', 1)
+        if 'id: addonBadgeText' not in option:
+            badge = """                titleBadge: Component {
+                    Rectangle {
+                        implicitWidth: addonBadgeText.implicitWidth + rootObj.s(12)
+                        implicitHeight: rootObj.s(18)
+                        radius: rootObj.s(4)
+                        color: Qt.alpha(ThemeBackend.mauve, 0.15)
+                        border.color: Qt.alpha(ThemeBackend.mauve, 0.4)
+                        border.width: 1
+
+                        Text {
+                            id: addonBadgeText
+                            anchors.centerIn: parent
+                            text: "Addon"
+                            font.family: ThemeBackend.fontFamily
+                            font.pixelSize: rootObj.s(10)
+                            font.bold: true
+                            color: ThemeBackend.mauve
+                        }
+                    }
+                }
+
+"""
+            toggle_anchor = '                Toggle {\n                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter'
+            if option.count(toggle_anchor) != 1: raise ValueError('Do Not Disturb toggle anchor changed')
+            option = option.replace(toggle_anchor, badge + toggle_anchor, 1)
+        text = text[:option_start] + option + text[option_end:]
     default_anchor = '        "manualInhibit": false,'
     if '"keepSystemAwake": false,' not in text:
         if text.count(default_anchor) != 1: raise ValueError('Idle setting defaults anchor changed')
