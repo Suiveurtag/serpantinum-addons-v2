@@ -39,12 +39,24 @@ def music(text):
 
 
 def network(text):
-    text = shadows(text, '                id: orbitContainer\n', 'network shadows', 'window.visible')
-    return insert(text, '                            id: centralCore\n', ('network hold', '''                            property Item seasonalCharge: HoldEnergy {
-                                parent: centralCore; anchors.fill: parent; z: 6
-                                held: coreMa.pressed && window.currentConn && !showPassword
-                                charge: centralCore.disconnectFill
-                            }
+    legacy_anchor = '                id: orbitContainer\n'
+    if legacy_anchor in text:
+        return shadows(text, legacy_anchor, 'network shadows', 'window.visible')
+    return insert(text, '            NetworkCoreLayer {\n', ('network shadows', '''            Loader {
+                enabled: false
+                anchors.fill: parent; z: 0
+                active: Halloween.animationEnabled && window.visible
+                sourceComponent: DistantBats {}
+            }
+'''))
+
+
+def network_core(text):
+    return insert(text, '                id: centralCore\n', ('network hold', '''                property Item seasonalCharge: HoldEnergy {
+                    parent: centralCore; anchors.fill: parent; z: 6
+                    held: coreMa.pressed && window.currentConn && !showPassword
+                    charge: centralCore.disconnectFill
+                }
 '''))
 
 
@@ -58,16 +70,19 @@ def fill(text):
 
 
 def system(text):
-    text = insert(text, '        id: sidebarPanel\n', ('system light', '''        Loader {
+    return insert(text, '        id: sidebarPanel\n', ('system light', '''        Loader {
             anchors.fill: parent; z: 2; enabled: false
             active: Halloween.activeSeason && root.visible
             sourceComponent: LockVeil { authenticating: root.isDraggingVol || root.isDraggingBri }
         }
 '''))
-    return insert(text, '                            id: actionCapsule\n', ('power charge', '''                            property Item seasonalCharge: HoldEnergy {
-                                parent: actionCapsule; anchors.fill: parent; z: 7
-                                held: actionMa.pressed && !actionCapsule.isDisabled
-                                charge: actionCapsule.fillLevel
+
+
+def system_power_actions(text):
+    return insert(text, '            id: actionCapsule\n', ('power charge', '''            property Item seasonalCharge: HoldEnergy {
+                parent: actionCapsule; anchors.fill: parent; z: 7
+                held: actionMa.pressed && !actionCapsule.isDisabled
+                charge: actionCapsule.fillLevel
                             }
 '''))
 
@@ -189,7 +204,9 @@ def theme(text):
 def extensions(qs):
     return {qs/'guide/GuidePopup.qml':guide, qs/'calendar/NativeCalendar.qml':calendar,
             qs/'media/MusicPopup.qml':music, qs/'network/NetworkPopup.qml':network,
+            qs/'network/NetworkCoreLayer.qml':network_core,
             qs/'reusables/buttons/FillButton.qml':fill, qs/'syspanel/SystemPanel.qml':system,
+            qs/'syspanel/SystemPanelPowerActions.qml':system_power_actions,
             qs/'launcher/Launcher.qml':launcher, qs/'popouts/Osd.qml':osd,
             qs/'lock/Lock.qml':lock, qs/'volume/VolumePopup.qml':volume,
             qs/'guide/theme/ThemeTab.qml':theme, qs/'bar/BarModule.qml':bar_module,

@@ -168,7 +168,8 @@ def patch_control(text):
 
 
 def patch_network(text):
-    text = insert(text, '                id: orbitContainer\n', ('network weave', '''                Loader {
+    if '                id: orbitContainer\n' in text:
+        text = insert(text, '                id: orbitContainer\n', ('network weave', '''                Loader {
                     enabled: false
                     anchors.fill: parent
                     active: Halloween.activeSeason && window.visible && window.currentPower
@@ -177,6 +178,19 @@ def patch_network(text):
                         connected: window.currentConn; transport: window.activeMode
                     }
                 }
+'''))
+    else:
+        # Newer Serpantinum builds split the core and card repeaters into
+        # NetworkCoreLayer and NetworkCardLayer. Keep the seasonal layer in
+        # their shared parent so it can map both sets of item coordinates.
+        text = insert(text, '            NetworkCoreLayer {\n', ('network weave', '''            Loader {
+                anchors.fill: parent
+                active: Halloween.activeSeason && window.visible && window.currentPower
+                sourceComponent: NetworkWeave {
+                    cores: coreLayer.repeater; nodes: cardLayer.repeater
+                    connected: window.currentConn; transport: window.activeMode
+                }
+            }
 '''))
     # Keep the original graph lightning for OFF; replace its active rendering
     # and repaint timer with vector conduits for the seasonal presentation.
@@ -228,7 +242,8 @@ def patch_music(text):
 
 
 def patch_system(text):
-    text = insert(text, '                            id: actionCapsule\n', ('power control', '''                            property Item seasonalEnergy: ControlEffects {
+    if '                            id: actionCapsule\n' in text:
+        text = insert(text, '                            id: actionCapsule\n', ('power control', '''                            property Item seasonalEnergy: ControlEffects {
                                 parent: actionCapsule
                                 anchors.fill: parent; z: 6
                                 cornerRadius: actionCapsule.radius
@@ -250,6 +265,17 @@ def patch_system(text):
                                 Behavior on warmth { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
                             }
                         }
+'''))
+
+
+def patch_power_actions(text):
+    return insert(text, '            id: actionCapsule\n', ('power control', '''            property Item seasonalEnergy: ControlEffects {
+                parent: actionCapsule
+                anchors.fill: parent; z: 6
+                cornerRadius: actionCapsule.radius
+                engaged: panel.visible && !actionCapsule.isDisabled && actionMa.containsMouse
+                charge: actionCapsule.fillLevel
+            }
 '''))
 
 
@@ -310,6 +336,7 @@ def transformations(qs):
             qs/'reusables/buttons/FillButton.qml': patch_fill_button,
             qs/'launcher/Launcher.qml': patch_launcher,
             qs/'network/NetworkPopup.qml': patch_network,
+            qs/'syspanel/SystemPanelPowerActions.qml': patch_power_actions,
             qs/'media/MusicPopup.qml': patch_music,
             qs/'syspanel/SystemPanel.qml': patch_system,
             qs/'widgets/Widget.qml': patch_widgets,

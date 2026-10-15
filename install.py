@@ -55,12 +55,6 @@ def patch_guide(text):
             text = text.replace(old, new, 1)
         elif new not in text:
             raise ValueError('Guide tab title fallback anchor changed')
-        old = 'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)'
-        new = 'text: root.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)'
-        if old in text:
-            text = text.replace(old, new, 1)
-        elif new not in text:
-            raise ValueError('Guide sidebar title anchor changed')
         return text
     # Migrate our first revision while leaving every upstream tab intact.
     text = re.sub(r'        // BEGIN serpantinum-addons-v2 tabs.*?        // END serpantinum-addons-v2 tabs[\s,]*(?=    \])', '', text, flags=re.S)
@@ -101,6 +95,51 @@ def patch_guide(text):
     sidebar = '\n                                // BEGIN serpantinum-addons-v2 sidebar\n' + '\n'.join(blocks) + '\n                                // END serpantinum-addons-v2 sidebar\n'
     text = text[:start] + sidebar + about + text[stop + 1:]
     return text.replace('                                    tabAbout\n', '                                    tabAddonAddons, tabAddonMonitors, tabAddonKeybinds, tabAbout\n', 1)
+
+
+def patch_guide_sidebar(text):
+    old = 'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)'
+    new = 'text: popup.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)'
+    if old in text:
+        return text.replace(old, new, 1)
+    if new in text:
+        return text
+    raise ValueError('Guide sidebar title anchor changed')
+
+
+def patch_idle_tab(text):
+    marker = 'settingId: "idle_manual_system_awake"'
+    if marker not in text:
+        anchor = '            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)'
+        if text.count(anchor) != 1: raise ValueError('Do Not Disturb companion option anchor changed')
+        option = '''            SettingsRow {
+                rootObj: idleTabRoot.rootObj
+                settingId: "idle_manual_system_awake"
+                searchKeywords: "keep awake suspend lid closed download network"
+                visible: idleTabRoot.idleEnabled
+                icon: "󰒲"
+                title: "Keep system awake"
+                description: "Also block system suspend and lid-triggered sleep while Do Not Disturb is enabled."
+
+                Toggle {
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    enabled: idleTabRoot.manualInhibit
+                    checked: idleTabRoot.idleSettings.keepSystemAwake === true
+                    accentColor: ThemeBackend.mauve
+                    baseColor: ThemeBackend.surface1
+                    handleColor: ThemeBackend.crust
+                    handleOffColor: ThemeBackend.text
+                    onToggled: function(c) { idleTabRoot.updateRootSetting("keepSystemAwake", c); }
+                }
+            }
+
+'''
+        text = text.replace(anchor, option + anchor, 1)
+    default_anchor = '        "manualInhibit": false,'
+    if '"keepSystemAwake": false,' not in text:
+        if text.count(default_anchor) != 1: raise ValueError('Idle setting defaults anchor changed')
+        text = text.replace(default_anchor, default_anchor + '\n        "keepSystemAwake": false,', 1)
+    return text
 
 
 def patch_main(text):
@@ -240,6 +279,8 @@ def patch_shell(text):
     if zoom not in text: text = text.replace(addition, addition + zoom, 1)
     draw = '    // BEGIN serpantinum-addons-v2 desktop draw\n    AddonDesktopDraw {}\n    // END serpantinum-addons-v2 desktop draw\n'
     if draw not in text: text = text.replace(addition, addition + draw, 1)
+    awake = '    // BEGIN serpantinum-addons-v2 awake\n    AddonAwake {}\n    // END serpantinum-addons-v2 awake\n'
+    if awake not in text: text = text.replace(addition, addition + awake, 1)
     return text
 
 
@@ -443,7 +484,7 @@ def patch_draw_keybind(text):
 
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
-    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
+    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
@@ -452,7 +493,7 @@ def install(without_halloween=False):
     for path, transform in seasonal.transformations(QS).items():
         text = pending.get(path, path.read_text())
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
-    payloads = {'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
     # NativeCalendar is captured before installing the wrapper, then patched in
     # memory. The native UI remains the source of truth for both seasonal states.
@@ -480,6 +521,8 @@ def install(without_halloween=False):
         pending[qmldir] += '\nAddonDesktopZoom 1.0 AddonDesktopZoom.qml\n'
     if 'AddonDesktopDraw 1.0 AddonDesktopDraw.qml' not in pending[qmldir]:
         pending[qmldir] += '\nAddonDesktopDraw 1.0 AddonDesktopDraw.qml\n'
+    if 'AddonAwake 1.0 AddonAwake.qml' not in pending[qmldir]:
+        pending[qmldir] += '\nAddonAwake 1.0 AddonAwake.qml\n'
     for folder in ('guide', 'network'):
         directory = QS/folder/'qmldir'
         original = directory.read_text() if directory.exists() else ''
