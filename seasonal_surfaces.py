@@ -214,7 +214,7 @@ def theme(text):
 
 
 def extensions(qs):
-    return {qs/'guide/GuidePopup.qml':guide, qs/'calendar/NativeCalendar.qml':calendar,
+    result = {qs/'guide/GuidePopup.qml':guide, qs/'calendar/NativeCalendar.qml':calendar,
             qs/'media/MusicPopup.qml':music, qs/'network/NetworkPopup.qml':network,
             qs/'network/NetworkCoreLayer.qml':network_core,
             qs/'reusables/buttons/FillButton.qml':fill, qs/'syspanel/SystemPanel.qml':system,
@@ -222,9 +222,12 @@ def extensions(qs):
             qs/'launcher/Launcher.qml':launcher, qs/'popouts/Osd.qml':osd,
             qs/'lock/Lock.qml':lock, qs/'volume/VolumePopup.qml':volume,
             qs/'guide/theme/ThemeTab.qml':theme, qs/'bar/BarModule.qml':bar_module,
-            qs/'bar/BarSideModule.qml':lambda text: bar_module(text, True),
             qs/'notifications/Notification.qml':notification, qs/'Shell.qml':shell,
             qs/'widgets/faces/user/UserFace.qml':user_face}
+    legacy_side_module = qs/'bar/BarSideModule.qml'
+    if legacy_side_module.exists():
+        result[legacy_side_module] = lambda text: bar_module(text, True)
+    return result
 
 
 def bar_module(text, vertical=False):

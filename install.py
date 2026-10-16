@@ -371,7 +371,8 @@ def patch_shell(text):
         text = text.replace(block, '')
     anchor = '    Main {}\n'
     if text.count(anchor) != 1: raise ValueError('Shell root component anchor changed')
-    return text.replace(anchor, '\n'.join(blocks) + '\n' + anchor, 1)
+    prefix, suffix = text.split(anchor, 1)
+    return prefix.rstrip() + '\n\n' + '\n'.join(blocks) + '\n' + anchor + suffix
 
 
 def patch_screenshot_overlay(text):
@@ -592,7 +593,7 @@ def install(without_halloween=False):
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
     pending[keybind_path] = patch_draw_keybind(patch_zoom_keybind(patch_spotlight_keybind(patch_keybinds(keybind_path.read_text()))))
     for path, transform in seasonal.transformations(QS).items():
-        text = pending.get(path, path.read_text())
+        text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
     payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
