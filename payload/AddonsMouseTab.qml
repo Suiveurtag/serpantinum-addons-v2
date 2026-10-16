@@ -296,18 +296,6 @@ Item {
                 ]
             }
             SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_zoom_click_through"; searchTab: "addons"
-                searchKeywords: "desktop zoom click through mouse clickthrough souris clic"
-                title: qsTr("Allow clicks while zoomed")
-                description: qsTr("Pass clicks through without closing zoom. The scroll wheel also passes to the app.")
-                icon: "󰍽"; wrapText: true
-                Toggle {
-                    checked: Config.getSetting("addonsV2ZoomAllowClicks", false)
-                    accentColor: ThemeBackend.mauve
-                    onToggled: Config.setSetting("addonsV2ZoomAllowClicks", checked)
-                }
-            }
-            SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_mouse_acceleration"; searchTab: "addons"
                 searchKeywords: "mouse pointer acceleration speed souris accélération pointeur"
                 title: "Mouse acceleration"; icon: "󰍽"; wrapText: true
