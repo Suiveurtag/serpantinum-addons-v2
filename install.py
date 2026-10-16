@@ -690,10 +690,43 @@ def patch_spotlight_keybind(text):
 
 def patch_zoom_keybind(text):
     marker = '-- BEGIN serpantinum-addons-v2 desktop zoom'
-    if marker in text: return text
-    if '"SUPER + SHIFT + Z"' in text: raise ValueError('Desktop zoom shortcut already in use')
+    end_marker = '-- END serpantinum-addons-v2 desktop zoom'
+    scroll_marker = '-- BEGIN serpantinum-addons-v2 desktop zoom scroll'
     command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom toggle'
-    return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + Z", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 desktop zoom\n'
+    scroll_up = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom zoomIn'
+    scroll_down = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom zoomOut'
+    scroll_block = (
+        scroll_marker + '\n'
+        + 'local function desktopZoomIsActive()\n'
+        + '    return hl.get_config("cursor.zoom_rigid") == true and hl.get_config("cursor.zoom_detached_camera") == false\n'
+        + 'end\n'
+        + 'hl.bind("mouse_up", function()\n'
+        + '    if desktopZoomIsActive() then hl.exec_cmd(' + json.dumps(scroll_up) + ') end\n'
+        + 'end, { non_consuming = true })\n'
+        + 'hl.bind("mouse_down", function()\n'
+        + '    if desktopZoomIsActive() then hl.exec_cmd(' + json.dumps(scroll_down) + ') end\n'
+        + 'end, { non_consuming = true })\n'
+        + '-- END serpantinum-addons-v2 desktop zoom scroll'
+    )
+    previous_scroll_block = (
+        scroll_marker + '\n'
+        + 'hl.bind("mouse_up", hl.dsp.exec_cmd(' + json.dumps(scroll_up) + '), { non_consuming = true })\n'
+        + 'hl.bind("mouse_down", hl.dsp.exec_cmd(' + json.dumps(scroll_down) + '), { non_consuming = true })\n'
+        + '-- END serpantinum-addons-v2 desktop zoom scroll'
+    )
+    if marker in text:
+        if scroll_marker in text:
+            # Upgrade the earlier generated binds without overwriting user edits.
+            if previous_scroll_block in text:
+                return text.replace(previous_scroll_block, scroll_block, 1)
+            return text
+        if text.count(end_marker) != 1:
+            raise ValueError('Desktop zoom keybind block changed')
+        return text.replace(end_marker, end_marker + '\n\n' + scroll_block, 1)
+    if '"SUPER + SHIFT + Z"' in text: raise ValueError('Desktop zoom shortcut already in use')
+    return (text.rstrip() + '\n\n' + marker + '\n'
+            + 'hl.bind("SUPER + SHIFT + Z", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n'
+            + end_marker + '\n\n' + scroll_block + '\n')
 
 
 def patch_draw_keybind(text):
