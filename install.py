@@ -142,15 +142,45 @@ def patch_guide_sidebar(text):
 
 
 def patch_idle_tab(text):
+    if 'import QtQuick.Effects' not in text:
+        text = text.replace('import QtQuick\n', 'import QtQuick\nimport QtQuick.Effects\n', 1)
+    if 'import Quickshell.Services.UPower' not in text:
+        text = text.replace('import Quickshell\n', 'import Quickshell\nimport Quickshell.Services.UPower\n', 1)
+    laptop_property = '    readonly property bool codexModeAvailable: UPower.displayDevice.ready ? UPower.displayDevice.isLaptopBattery : !SystemInfo.isDesktop'
+    if laptop_property not in text:
+        anchor = '    property bool lockOnSleep: idleSettings && idleSettings.lockOnSleep !== undefined ? idleSettings.lockOnSleep : true'
+        if text.count(anchor) != 1: raise ValueError('Idle laptop detection anchor changed')
+        text = text.replace(anchor, anchor + '\n' + laptop_property, 1)
     marker = 'settingId: "idle_manual_system_awake"'
-    if marker not in text:
-        anchor = '            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)'
-        if text.count(anchor) != 1: raise ValueError('Do Not Disturb companion option anchor changed')
-        option = '''            SettingsRow {
+    rectangle_anchor = '            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)'
+    if text.count(rectangle_anchor) != 1: raise ValueError('Do Not Disturb companion option anchor changed')
+    if marker in text:
+        option_start = text.rfind('            SettingsRow {', 0, text.index(marker))
+        if option_start < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
+        depth = 0
+        option_end = -1
+        for index in range(text.index('{', option_start), len(text)):
+            if text[index] == '{': depth += 1
+            elif text[index] == '}':
+                depth -= 1
+                if depth == 0:
+                    option_end = index + 1
+                    break
+        if option_end < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
+        option = text[option_start:option_end]
+        text = text[:option_start] + text[option_end:]
+        option = option.replace('searchKeywords: "keep awake suspend lid closed download network"', 'searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"', 1)
+        option = option.replace('title: "Keep system awake"', 'title: "Codex mode"', 1)
+        option = option.replace('                icon: "󰒲"', '                icon: "󰖙"', 1)
+        option = option.replace('radius: rootObj.s(4)', 'radius: ThemeBackend.borderRadius', 1)
+    else:
+        option = '''                SettingsRow {
                 rootObj: idleTabRoot.rootObj
                 settingId: "idle_manual_system_awake"
                 searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"
                 visible: idleTabRoot.idleEnabled
+                enabled: idleTabRoot.codexModeAvailable
+                opacity: idleTabRoot.codexModeAvailable ? 1.0 : 0.38
                 icon: "󰖙"
                 title: "Codex mode"
                 description: "Also block system suspend and lid-triggered sleep while Do Not Disturb is enabled."
@@ -162,6 +192,7 @@ def patch_idle_tab(text):
                         color: Qt.alpha(ThemeBackend.mauve, 0.15)
                         border.color: Qt.alpha(ThemeBackend.mauve, 0.4)
                         border.width: 1
+                        clip: true
 
                         Text {
                             id: addonBadgeText
@@ -171,6 +202,35 @@ def patch_idle_tab(text):
                             font.pixelSize: rootObj.s(10)
                             font.bold: true
                             color: ThemeBackend.mauve
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                            onEntered: badgeShimmerAnimation.restart()
+                        }
+
+                        Rectangle {
+                            id: badgeShimmer
+                            x: -width
+                            y: -height / 4
+                            width: parent.width * 0.45
+                            height: parent.height * 1.5
+                            rotation: 18
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.5; color: Qt.alpha(ThemeBackend.text, 0.45) }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                            NumberAnimation on x {
+                                id: badgeShimmerAnimation
+                                from: -badgeShimmer.width
+                                to: badgeShimmer.parent.width + badgeShimmer.width
+                                duration: 450
+                                running: false
+                            }
                         }
                     }
                 }
@@ -185,20 +245,47 @@ def patch_idle_tab(text):
                     handleOffColor: ThemeBackend.text
                     onToggled: function(c) { idleTabRoot.updateRootSetting("keepSystemAwake", c); }
                 }
-            }
+                }
 
 '''
-        text = text.replace(anchor, option + anchor, 1)
-    else:
-        option_start = text.rfind('            SettingsRow {', 0, text.index(marker))
-        option_end = text.find('            Rectangle {\n                Layout.fillWidth: true\n                implicitHeight: actionsBoxCol.implicitHeight + rootObj.s(24)', option_start)
-        if option_start < 0 or option_end < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
-        option = text[option_start:option_end]
-        option = option.replace('searchKeywords: "keep awake suspend lid closed download network"', 'searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"', 1)
-        option = option.replace('title: "Keep system awake"', 'title: "Codex mode"', 1)
-        option = option.replace('                icon: "󰒲"', '                icon: "󰖙"', 1)
-        option = option.replace('radius: rootObj.s(4)', 'radius: ThemeBackend.borderRadius', 1)
-        if 'id: addonBadgeText' not in option:
+    if 'id: badgeShimmer' not in option:
+        if 'id: addonBadgeText' in option:
+            badge_start = option.index('                titleBadge: Component {')
+            badge_end = option.index('\n\n                Toggle {', badge_start)
+            badge = option[badge_start:badge_end]
+            badge = badge.replace('                        border.width: 1', '''                        border.width: 1
+                        clip: true
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                            onEntered: badgeShimmerAnimation.restart()
+                        }
+
+                        Rectangle {
+                            id: badgeShimmer
+                            x: -width
+                            y: -height / 4
+                            width: parent.width * 0.45
+                            height: parent.height * 1.5
+                            rotation: 18
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.5; color: Qt.alpha(ThemeBackend.text, 0.45) }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                            NumberAnimation on x {
+                                id: badgeShimmerAnimation
+                                from: -badgeShimmer.width
+                                to: badgeShimmer.parent.width + badgeShimmer.width
+                                duration: 450
+                                running: false
+                            }
+                        }''', 1)
+            option = option[:badge_start] + badge + option[badge_end:]
+        else:
             badge = """                titleBadge: Component {
                     Rectangle {
                         implicitWidth: addonBadgeText.implicitWidth + rootObj.s(12)
@@ -224,7 +311,31 @@ def patch_idle_tab(text):
             toggle_anchor = '                Toggle {\n                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter'
             if option.count(toggle_anchor) != 1: raise ValueError('Do Not Disturb toggle anchor changed')
             option = option.replace(toggle_anchor, badge + toggle_anchor, 1)
-        text = text[:option_start] + option + text[option_end:]
+    if 'enabled: idleTabRoot.codexModeAvailable' not in option:
+        option = option.replace('visible: idleTabRoot.idleEnabled', 'visible: idleTabRoot.idleEnabled\n                enabled: idleTabRoot.codexModeAvailable\n                opacity: idleTabRoot.codexModeAvailable ? 1.0 : 0.38', 1)
+    option = option.replace('enabled: idleTabRoot.manualInhibit && idleTabRoot.codexModeAvailable && idleTabRoot.codexModeAvailable', 'enabled: idleTabRoot.manualInhibit && idleTabRoot.codexModeAvailable', 1)
+    if 'enabled: idleTabRoot.manualInhibit && idleTabRoot.codexModeAvailable' not in option:
+        option = option.replace('enabled: idleTabRoot.manualInhibit', 'enabled: idleTabRoot.manualInhibit && idleTabRoot.codexModeAvailable', 1)
+    rounded_mask = '''                        id: addonBadge
+                        layer.enabled: true
+                        layer.effect: MultiEffect { maskEnabled: true; maskSource: addonBadgeMask }
+
+                        Rectangle {
+                            id: addonBadgeMask
+                            anchors.fill: parent
+                            radius: addonBadge.radius
+                            color: "black"
+                            visible: false
+                            layer.enabled: true
+                        }'''
+    if 'id: addonBadgeMask' not in option:
+        option = option.replace('                        border.width: 1\n                        clip: true', '                        border.width: 1\n' + rounded_mask, 1)
+    option = option.replace('            SettingsRow {', '                SettingsRow {', 1)
+    inhibit_position = text.index('settingId: "idle_manual_inhibit"')
+    rectangle_position = text.index(rectangle_anchor, inhibit_position)
+    option_anchor = text.rfind('            }', inhibit_position, rectangle_position)
+    if option_anchor < 0: raise ValueError('Do Not Disturb settings group anchor changed')
+    text = text[:option_anchor] + option + '\n' + text[option_anchor:]
     default_anchor = '        "manualInhibit": false,'
     if '"keepSystemAwake": false,' not in text:
         if text.count(default_anchor) != 1: raise ValueError('Idle setting defaults anchor changed')
