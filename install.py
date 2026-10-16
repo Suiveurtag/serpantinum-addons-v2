@@ -34,14 +34,23 @@ def shader_package_name(folder):
 
 def patch_guide(text):
     import re
+    addons_entry = '        { id: "Addons", key: "addons", name: "Addons", icon: "󰐱", file: "AddonsTab.qml", iconOffsetX: 0 },'
+    addons_entry_with_subtabs = '''        { id: "Addons", key: "addons", name: "Addons", icon: "󰐱", file: "AddonsTab.qml", iconOffsetX: 0,
+            subtabs: [
+                { id: "AddonsGeneral", key: "addons_general", name: "General", icon: "󰒓", file: "AddonsTab.qml", iconOffsetX: 0 },
+                { id: "AddonsMouse", key: "addons_mouse", name: "Mouse", icon: "󰍽", file: "AddonsMouseTab.qml", iconOffsetX: 0 }
+            ]
+        },'''
     # v2.2.8 moved guide navigation and content into a model-driven loader.
     # Register addon tabs in that model so upstream handles the sidebar and content.
     if 'property var tabsModel: [' in text:
+        if addons_entry in text:
+            text = text.replace(addons_entry, addons_entry_with_subtabs, 1)
         if '// BEGIN serpantinum-addons-v2 tabs' not in text:
             anchor = '        { id: "About", key: "about", name: "About", icon: "󰋽", file: "AboutTab.qml", iconOffsetX: 0 }'
             if text.count(anchor) != 1: raise ValueError('Guide tabs model anchor changed')
             block = '''        // BEGIN serpantinum-addons-v2 tabs
-        { id: "Addons", key: "addons", name: "Addons", icon: "󰐱", file: "AddonsTab.qml", iconOffsetX: 0 },
+''' + addons_entry_with_subtabs + '''
         { id: "Monitors", key: "addon_monitors", name: "Monitors", icon: "󰍹", file: "AddonMonitorsTab.qml", iconOffsetX: 0 },
         { id: "Keybinds", key: "addon_keybinds", name: "Keybinds", icon: "󰌌", file: "AddonKeybindsTab.qml", iconOffsetX: 0 },
         // END serpantinum-addons-v2 tabs
@@ -76,7 +85,7 @@ def patch_guide(text):
     text = text.replace(anchor + ',\n', anchor + '\n')
     if text.count(anchor) != 1: raise ValueError('Guide tabs anchor changed')
     block = '''        // BEGIN serpantinum-addons-v2 tabs
-        { id: "Addons", key: "addons", name: "Addons", icon: "󰐱", file: "AddonsTab.qml", iconOffsetX: 0 },
+''' + addons_entry_with_subtabs + '''
         { id: "Monitors", key: "addon_monitors", name: "Monitors", icon: "󰍹", file: "AddonMonitorsTab.qml", iconOffsetX: 0 },
         { id: "Keybinds", key: "addon_keybinds", name: "Keybinds", icon: "󰌌", file: "AddonKeybindsTab.qml", iconOffsetX: 0 },
         // END serpantinum-addons-v2 tabs
@@ -706,7 +715,7 @@ def install(without_halloween=False):
     for path, transform in seasonal.transformations(QS).items():
         text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
-    payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonsMouseTab.qml': 'guide/AddonsMouseTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
     # NativeCalendar is captured before installing the wrapper, then patched in
     # memory. The native UI remains the source of truth for both seasonal states.

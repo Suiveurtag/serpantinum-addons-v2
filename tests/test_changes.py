@@ -41,16 +41,20 @@ class ChangeTests(unittest.TestCase):
             self.assertIn('tabAddonAddons, tabAddonMonitors, tabAddonKeybinds, tabAbout', patched)
 
     def test_addons_options_and_weather_patch_preserve_each_other(self):
-        addons = (ROOT/'payload/AddonsTab.qml').read_text()
-        for option in ('HalloweenCard', 'addons_trackpad_speed', 'addons_trackpad_typing',
-                       'addons_trackpad_clicks_typing', 'addonsV2ObfuscateWeatherCity'):
+        general = (ROOT/'payload/AddonsTab.qml').read_text()
+        mouse = (ROOT/'payload/AddonsMouseTab.qml').read_text()
+        for option in ('HalloweenCard', 'addons_mullvad_dns', 'addonsV2ObfuscateWeatherCity'):
             with self.subTest(option=option):
-                self.assertIn(option, addons)
-        self.assertIn('SettingsGroup {', addons)
-        self.assertIn('spacing: rootObj.s(8)', addons)
-        self.assertIn('Layout.bottomMargin: rootObj.s(6)', addons)
-        self.assertIn('opacity: root.noTrackpadDetected ? 0.38 : 1.0', addons)
-        self.assertEqual(addons.count('settingId: "addons_trackpad_'), 3)
+                self.assertIn(option, general)
+        for option in ('addons_mouse_spotlight', 'addons_mouse_acceleration', 'addons_trackpad_speed',
+                       'addons_trackpad_typing', 'addons_trackpad_clicks_typing', 'addons_legacy_clock'):
+            with self.subTest(option=option):
+                self.assertIn(option, mouse)
+        self.assertIn('SettingsGroup {', mouse)
+        self.assertIn('spacing: rootObj.s(8)', mouse)
+        self.assertIn('Layout.bottomMargin: rootObj.s(6)', general)
+        self.assertIn('opacity: root.noTrackpadDetected ? 0.38 : 1.0', mouse)
+        self.assertEqual(mouse.count('settingId: "addons_trackpad_'), 3)
 
         weather_path = installer.QS/'widgets/faces/weather/WeatherFaceFull.qml'
         weather = installer.patch_weather_face(weather_path.read_text())
