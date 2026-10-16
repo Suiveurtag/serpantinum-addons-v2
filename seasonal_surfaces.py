@@ -42,7 +42,10 @@ def network(text):
     legacy_anchor = '                id: orbitContainer\n'
     if legacy_anchor in text:
         return shadows(text, legacy_anchor, 'network shadows', 'window.visible')
-    return insert(text, '            NetworkCoreLayer {\n', ('network shadows', '''            Loader {
+    anchor = '            NetworkCoreLayer {\n'
+    if anchor not in text:
+        anchor = '            NetworkControls {\n'
+    return insert(text, anchor, ('network shadows', '''            Loader {
                 enabled: false
                 anchors.fill: parent; z: 0
                 active: Halloween.animationEnabled && window.visible
@@ -84,6 +87,15 @@ def system_power_actions(text):
                 held: actionMa.pressed && !actionCapsule.isDisabled
                 charge: actionCapsule.fillLevel
                             }
+'''))
+
+
+def user_face(text):
+    return insert(text, '                        id: actionCapsule\n', ('power charge', '''                        property Item seasonalCharge: HoldEnergy {
+                            parent: actionCapsule; anchors.fill: parent; z: 7
+                            held: actionMa.pressed
+                            charge: actionCapsule.fillLevel
+                        }
 '''))
 
 
@@ -211,7 +223,8 @@ def extensions(qs):
             qs/'lock/Lock.qml':lock, qs/'volume/VolumePopup.qml':volume,
             qs/'guide/theme/ThemeTab.qml':theme, qs/'bar/BarModule.qml':bar_module,
             qs/'bar/BarSideModule.qml':lambda text: bar_module(text, True),
-            qs/'notifications/Notification.qml':notification, qs/'Shell.qml':shell}
+            qs/'notifications/Notification.qml':notification, qs/'Shell.qml':shell,
+            qs/'widgets/faces/user/UserFace.qml':user_face}
 
 
 def bar_module(text, vertical=False):

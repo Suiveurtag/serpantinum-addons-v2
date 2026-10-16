@@ -25,13 +25,17 @@ def patch_palette(text):
     # Theme changes while ON still update the normal values, so OFF is exact.
     pattern = r'    property color (\w+): ("#[0-9a-fA-F]+")'
     colors = re.findall(pattern, text)
-    if len(colors) != 22 or text.count('root[propName]') != 2:
+    legacy_access = text.count('root[propName]') == 2
+    current_access = text.count('root[names[i]]') == 1 and text.count('root[item.name]') == 1
+    if len(colors) != 22 or not (legacy_access or current_access):
         raise ValueError('ThemeBackend palette storage changed')
     text = re.sub(pattern, lambda m: (
         f'    property color _normal{m[1]}: {m[2]}\n'
         f'    property color {m[1]}: Halloween.presentColor("{m[1]}", _normal{m[1]})'
     ), text)
     text = text.replace('root[propName]', 'root["_normal" + propName]')
+    text = text.replace('root[names[i]]', 'root["_normal" + names[i]]')
+    text = text.replace('root[item.name]', 'root["_normal" + item.name]')
     return text.replace('    id: root\n', f'    id: root\n    // BEGIN {MARK} palette\n    // Normal preset values are never overwritten by the seasonal palette.\n    // END {MARK} palette\n', 1)
 
 
@@ -179,11 +183,24 @@ def patch_network(text):
                     }
                 }
 '''))
-    else:
+    elif '            NetworkCoreLayer {\n' in text:
         # Newer Serpantinum builds split the core and card repeaters into
         # NetworkCoreLayer and NetworkCardLayer. Keep the seasonal layer in
         # their shared parent so it can map both sets of item coordinates.
         text = insert(text, '            NetworkCoreLayer {\n', ('network weave', '''            Loader {
+                anchors.fill: parent
+                active: Halloween.activeSeason && window.visible && window.currentPower
+                sourceComponent: NetworkWeave {
+                    cores: coreLayer.repeater; nodes: cardLayer.repeater
+                    connected: window.currentConn; transport: window.activeMode
+                }
+            }
+'''))
+    else:
+        # Some deployed layouts expose the split repeaters through the
+        # NetworkControls layer instead of NetworkCoreLayer.
+        text = insert(text, '            NetworkControls {\n', ('network weave', '''            Loader {
+                enabled: false
                 anchors.fill: parent
                 active: Halloween.activeSeason && window.visible && window.currentPower
                 sourceComponent: NetworkWeave {
@@ -268,6 +285,17 @@ def patch_system(text):
 '''))
 
 
+def patch_user_face(text):
+    return insert(text, '                        id: actionCapsule\n', ('power control', '''                        property Item seasonalEnergy: ControlEffects {
+                            parent: actionCapsule
+                            anchors.fill: parent; z: 6
+                            cornerRadius: actionCapsule.radius
+                            engaged: actionMa.containsMouse
+                            charge: actionCapsule.fillLevel
+                        }
+'''))
+
+
 def patch_power_actions(text):
     return insert(text, '            id: actionCapsule\n', ('power control', '''            property Item seasonalEnergy: ControlEffects {
                 parent: actionCapsule
@@ -339,6 +367,7 @@ def transformations(qs):
             qs/'syspanel/SystemPanelPowerActions.qml': patch_power_actions,
             qs/'media/MusicPopup.qml': patch_music,
             qs/'syspanel/SystemPanel.qml': patch_system,
+            qs/'widgets/faces/user/UserFace.qml': patch_user_face,
             qs/'widgets/Widget.qml': patch_widgets,
             qs/'reusables/buttons/IconButton.qml': patch_control,
             qs/'reusables/buttons/ClickButton.qml': patch_control}

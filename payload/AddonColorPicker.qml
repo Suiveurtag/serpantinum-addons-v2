@@ -371,9 +371,13 @@ PanelWindow {
                 MouseArea {
                     id: hexMouse
                     anchors.fill: parent; hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     enabled: root.selected && !root.copying && !root.closing
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.copy("HEX", root.hexColor)
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.LeftButton) root.copy("HEX", root.hexColor);
+                        else if (mouse.button === Qt.RightButton) root.copy("HEX", root.hexColor.substring(1));
+                    }
                 }
             }
 

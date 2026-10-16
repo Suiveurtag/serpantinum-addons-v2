@@ -50,11 +50,23 @@ def patch_guide(text):
         old = '                return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
         new = '''                let key = "guide.tabs." + (t.key || t.id).toLowerCase();
                 let label = I18n.t(key);
-                return label === key ? (t.name || t.id) : label;'''
+                return label && label !== key ? label : (t.name || t.id);'''
         if old in text:
             text = text.replace(old, new, 1)
-        elif new not in text:
+        elif new not in text and 'return translated === translationKey ? (t.name || t.id) : translated;' not in text and 'return translated && translated !== translationKey ? translated : (t.name || t.id);' not in text:
             raise ValueError('Guide tab title fallback anchor changed')
+        old_subtab = '                        return I18n.t("guide.tabs." + (st.key || st.id).toLowerCase(), st.name || st.id);'
+        new_subtab = '''                        let key = "guide.tabs." + (st.key || st.id).toLowerCase();
+                        let label = I18n.t(key);
+                        return label && label !== key ? label : (st.name || st.id);'''
+        if old_subtab in text:
+            text = text.replace(old_subtab, new_subtab, 1)
+        elif new_subtab not in text:
+            raise ValueError('Guide subtab title fallback anchor changed')
+        # Earlier deployed patches already used this resolver form.
+        text = text.replace(
+            'return translated === translationKey ? (t.name || t.id) : translated;',
+            'return translated && translated !== translationKey ? translated : (t.name || t.id);')
         return text
     # Migrate our first revision while leaving every upstream tab intact.
     text = re.sub(r'        // BEGIN serpantinum-addons-v2 tabs.*?        // END serpantinum-addons-v2 tabs[\s,]*(?=    \])', '', text, flags=re.S)
@@ -72,6 +84,17 @@ def patch_guide(text):
     # End marker sits before About now; remove it separately on later installs.
     text = re.sub(r'        // BEGIN serpantinum-addons-v2 tabs.*?        // END serpantinum-addons-v2 tabs\n', '', text, flags=re.S)
     text = text.replace(anchor, block + anchor, 1)
+    # I18n.t's second parameter is interpolation data, not a fallback string.
+    # If a language pack has no addon tab key it returns the key itself, which
+    # is why the Guide displayed `guide.tabs.addons` in the sidebar.
+    old_title = 'return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
+    new_title = '''let translationKey = "guide.tabs." + (t.key || t.id).toLowerCase();
+                let translated = I18n.t(translationKey);
+                return translated === translationKey ? (t.name || t.id) : translated;'''
+    text = text.replace(old_title, new_title)
+    text = text.replace(
+        'I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)',
+        'root.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)')
     legacy_sidebar_anchor = '                                Rectangle {\n                                    id: tabAbout'
     if legacy_sidebar_anchor not in text:
         # Newer Guide versions build their sidebar directly from tabsModel.
@@ -98,13 +121,24 @@ def patch_guide(text):
 
 
 def patch_guide_sidebar(text):
-    old = 'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)'
-    new = 'text: popup.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)'
-    if old in text:
-        return text.replace(old, new, 1)
-    if new in text:
-        return text
-    raise ValueError('Guide sidebar title anchor changed')
+    changes = [
+        (
+            'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)',
+            'text: popup.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)',
+            'text: popup.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)' in text,
+        ),
+        (
+            'text: I18n.t("guide.tabs." + (subtabItem.modelData.key || subtabItem.modelData.id).toLowerCase(), subtabItem.modelData.name || subtabItem.modelData.id)',
+            'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, subtabItem.modelData.key || subtabItem.modelData.id)',
+            'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, subtabItem.modelData.key || subtabItem.modelData.id)' in text,
+        ),
+    ]
+    for old, new, already_patched in changes:
+        if old in text:
+            text = text.replace(old, new, 1)
+        elif not already_patched:
+            raise ValueError('Guide sidebar title anchor changed')
+    return text
 
 
 def patch_idle_tab(text):
@@ -324,23 +358,28 @@ def patch_matugen(text):
 
 
 def patch_shell(text):
-    anchor = '    ScreenshotOverlay {}\n'
-    addition = '    // BEGIN serpantinum-addons-v2 color picker\n    AddonColorPicker {}\n    // END serpantinum-addons-v2 color picker\n'
-    if addition not in text:
-        if text.count(anchor) != 1: raise ValueError('Shell screenshot anchor changed')
-        text = text.replace(anchor, anchor + addition, 1)
-    spotlight = '    // BEGIN serpantinum-addons-v2 mouse spotlight\n    AddonMouseSpotlight {}\n    // END serpantinum-addons-v2 mouse spotlight\n'
-    if spotlight not in text: text = text.replace(addition, addition + spotlight, 1)
-    zoom = '    // BEGIN serpantinum-addons-v2 desktop zoom\n    AddonDesktopZoom {}\n    // END serpantinum-addons-v2 desktop zoom\n'
-    if zoom not in text: text = text.replace(addition, addition + zoom, 1)
-    draw = '    // BEGIN serpantinum-addons-v2 desktop draw\n    AddonDesktopDraw {}\n    // END serpantinum-addons-v2 desktop draw\n'
-    if draw not in text: text = text.replace(addition, addition + draw, 1)
-    awake = '    // BEGIN serpantinum-addons-v2 awake\n    AddonAwake {}\n    // END serpantinum-addons-v2 awake\n'
-    if awake not in text: text = text.replace(addition, addition + awake, 1)
-    return text
+    blocks = [
+        '    // BEGIN serpantinum-addons-v2 color picker\n    AddonColorPicker {}\n    // END serpantinum-addons-v2 color picker\n',
+        '    // BEGIN serpantinum-addons-v2 awake\n    AddonAwake {}\n    // END serpantinum-addons-v2 awake\n',
+        '    // BEGIN serpantinum-addons-v2 desktop draw\n    AddonDesktopDraw {}\n    // END serpantinum-addons-v2 desktop draw\n',
+        '    // BEGIN serpantinum-addons-v2 desktop zoom\n    AddonDesktopZoom {}\n    // END serpantinum-addons-v2 desktop zoom\n',
+        '    // BEGIN serpantinum-addons-v2 mouse spotlight\n    AddonMouseSpotlight {}\n    // END serpantinum-addons-v2 mouse spotlight\n',
+    ]
+    # These IPC handlers must be direct ShellRoot children. Keeping them in
+    # screenshotLoader makes every shortcut fail until a screenshot activates it.
+    for block in blocks:
+        text = text.replace(block, '')
+    anchor = '    Main {}\n'
+    if text.count(anchor) != 1: raise ValueError('Shell root component anchor changed')
+    return text.replace(anchor, '\n'.join(blocks) + '\n' + anchor, 1)
 
 
 def patch_screenshot_overlay(text):
+    # Newer upstream capture flow already crops the frozen image through
+    # screenshot.sh --source/--crop/--logical-size, so the legacy arguments
+    # below must not be layered on top of it.
+    if 'function frozenSourceArgs()' in text and '--source "${root.freezeImg}" --crop' in text:
+        return text
     marker = '// BEGIN serpantinum-addons-v2 frozen screenshot source'
     if marker not in text:
         anchor = '        let cmd = `bash ${Caching.serpantinumDir}/scripts/screenshot.sh --geometry "${root.geometryString}"`;'
@@ -380,6 +419,8 @@ def patch_screenshot_overlay(text):
 
 
 def patch_screenshot_script(text):
+    if '        --source) SOURCE_IMG="$2"; shift 2 ;;' in text and 'crop_source() {' in text:
+        return text
     marker = '# BEGIN serpantinum-addons-v2 frozen screenshot source'
     if marker in text: return text
     anchor = 'GEOMETRY=""\n'
@@ -408,6 +449,8 @@ def patch_screenshot_script(text):
 
 
 def patch_screenshot_cleanup(text):
+    if 'SOURCE_IMG=""' in text and '[ -n "$SOURCE_IMG" ] && rm -f "$SOURCE_IMG"' in text:
+        return text
     marker = '# BEGIN serpantinum-addons-v2 frozen screenshot cleanup'
     if marker in text: return text
     anchor = 'done\n\nexport XDG_RUNTIME_DIR='
@@ -425,6 +468,8 @@ export XDG_RUNTIME_DIR='''
 
 
 def patch_screenshot_frozen_validation(text):
+    if '        --source) SOURCE_IMG="$2"; shift 2 ;;' in text:
+        return text
     old = '''# BEGIN serpantinum-addons-v2 frozen screenshot source
     if [ -n "$FROZEN_IMG" ] && [ -f "$FROZEN_IMG" ] && [ -n "$FROZEN_GEOMETRY" ] && [ -n "$FROZEN_SIZE" ]; then
         ADDON_SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/serpantinum-addons-v2/scripts"
