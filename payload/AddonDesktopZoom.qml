@@ -8,6 +8,7 @@ Scope {
     id: root
     property bool active: false
     property bool ready: false
+    property bool clickThrough: false
     property real pointerX: 0
     property real pointerY: 0
     property real factor: 1
@@ -16,6 +17,7 @@ Scope {
     function open() {
         if (worker.running) return;
         ready = false;
+        clickThrough = Config.getSetting("addonsV2ZoomAllowClicks", false);
         targetFactor = Math.max(1, Math.min(6, Config.getSetting("addonsV2ZoomFactor", 2)));
         active = true;
         worker.running = true;
@@ -80,7 +82,10 @@ Scope {
             exclusionMode: ExclusionMode.Ignore
             anchors { top: true; bottom: true; left: true; right: true }
             focusable: root.active && pointerScreen
-            mask: Region { item: root.active ? input : null }
+            mask: Region {
+                item: root.active ? input : null
+                intersection: root.active && root.clickThrough ? Intersection.Xor : Intersection.Combine
+            }
             WlrLayershell.namespace: "qs-addon-desktop-zoom"
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: root.active && pointerScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
@@ -94,7 +99,7 @@ Scope {
                 id: input
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: root.active
+                enabled: root.active && !root.clickThrough
                 acceptedButtons: Qt.AllButtons
                 onPositionChanged: mouse => { root.pointerX = mouse.x + (overlay.monitor ? overlay.monitor.x : 0); root.pointerY = mouse.y + (overlay.monitor ? overlay.monitor.y : 0); }
                 onPressed: mouse => { mouse.accepted = true; root.close(); }

@@ -255,11 +255,20 @@ def notification(text):
 
 
 def shell(text):
-    return insert(text, '    ScreenshotOverlay {}\n', ('night intro', '''    Loader {
+    marker = f'{MARK} night intro'
+    text = re.sub(r'\n    // BEGIN ' + re.escape(marker) + r'\n.*?    // END ' + re.escape(marker) + r'\n', '', text, flags=re.S)
+    anchor = '    function ensureScreenshotOverlay() {\n'
+    if text.count(anchor) != 1:
+        raise ValueError('Shell screenshot overlay anchor changed')
+    block = '''    // BEGIN serpantinum-night-v2 night intro
+    Loader {
         active: Halloween.animationEnabled && Halloween.introRunning
         sourceComponent: Variants {
             model: Quickshell.screens
             delegate: NightIntro { required property var modelData; screen: modelData }
         }
     }
-'''))
+    // END serpantinum-night-v2 night intro
+
+'''
+    return text.replace(anchor, block + anchor, 1)
