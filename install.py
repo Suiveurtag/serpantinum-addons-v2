@@ -497,7 +497,40 @@ def patch_theme(text):
 
 
 def patch_matugen(text):
-    if '// BEGIN ' + MARK + ' generation' in text: return text
+    if '// BEGIN ' + MARK + ' generation' not in text:
+        text = patch_matugen_generation(text)
+    return patch_matugen_color_mode(text)
+
+
+def patch_matugen_color_mode(text):
+    # Startup generations can run before settings load, with the default color mode.
+    # Without the mode in the dedupe key, the later Vibrant/Vivid request is skipped.
+    if '// ' + MARK + ' color mode' in text: return text
+    replacements = [
+        ('    property string _lastGeneratedSchemeType: ""\n',
+         '    property string _lastGeneratedSchemeType: ""\n'
+         '    property string _lastGeneratedColorMode: "" // serpantinum-addons-v2 color mode\n'
+         '    property string _currentColorMode: ""\n'),
+        ('            && root._lastGeneratedSchemeType === selectedType\n',
+         '            && root._lastGeneratedSchemeType === selectedType\n'
+         '            && root._lastGeneratedColorMode === Config.getSetting("addonsV2ColorMode", "matugen")\n'),
+        ('                && root._currentSchemeType === selectedType) {',
+         '                && root._currentSchemeType === selectedType\n'
+         '                && root._currentColorMode === Config.getSetting("addonsV2ColorMode", "matugen")) {'),
+        ('        root._currentSchemeType = selectedType;\n        root._currentStaticJson = "";\n',
+         '        root._currentSchemeType = selectedType;\n        root._currentStaticJson = "";\n'
+         '        root._currentColorMode = Config.getSetting("addonsV2ColorMode", "matugen");\n'),
+        ('                root._lastGeneratedSchemeType = root._currentSchemeType;\n',
+         '                root._lastGeneratedSchemeType = root._currentSchemeType;\n'
+         '                root._lastGeneratedColorMode = root._currentColorMode;\n'),
+    ]
+    for anchor, replacement in replacements:
+        if text.count(anchor) != 1: raise ValueError('Matugen color mode anchor changed')
+        text = text.replace(anchor, replacement, 1)
+    return text
+
+
+def patch_matugen_generation(text):
     anchor = '''        matugenProcess.command = [
             "nice", "-n", "15",
             "matugen", "image", cleanPath,

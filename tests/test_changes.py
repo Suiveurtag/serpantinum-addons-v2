@@ -72,6 +72,12 @@ class ChangeTests(unittest.TestCase):
         self.assertIn('{name: "Vibrant", isMatugen: true', text)
         self.assertIn('systemPresets = sys.slice()', text)
 
+    def test_matugen_dedupe_includes_color_mode(self):
+        original = (installer.QS/'singletons/theme/Matugen.qml').read_text()
+        patched = installer.patch_matugen(original)
+        self.assertEqual(patched, installer.patch_matugen(patched))
+        self.assertEqual(patched.count('Config.getSetting("addonsV2ColorMode", "matugen")'), 4)
+
     def test_settings_sidebar_resolves_addon_titles(self):
         text = (installer.QS/'guide/GuideSidebar.qml').read_text()
         patched = installer.patch_guide_sidebar(text)
