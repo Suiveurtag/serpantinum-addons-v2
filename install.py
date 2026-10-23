@@ -736,7 +736,21 @@ def patch_zoom_keybind(text):
     command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom toggle'
     scroll_up = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom zoomIn'
     scroll_down = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonDesktopZoom zoomOut'
+    # Consuming binds stay disabled; desktop_zoom.py enables them only while zoom is open.
     scroll_block = (
+        scroll_marker + '\n'
+        + 'serpantinumDesktopZoomScroll = {\n'
+        + '    hl.bind("mouse_up", hl.dsp.exec_cmd(' + json.dumps(scroll_up) + ')),\n'
+        + '    hl.bind("mouse_down", hl.dsp.exec_cmd(' + json.dumps(scroll_down) + ')),\n'
+        + '}\n'
+        + 'for _, bind in ipairs(serpantinumDesktopZoomScroll) do bind:set_enabled(false) end\n'
+        + '-- END serpantinum-addons-v2 desktop zoom scroll'
+    )
+    previous_scroll_blocks = (
+        scroll_marker + '\n'
+        + 'hl.bind("mouse_up", hl.dsp.exec_cmd(' + json.dumps(scroll_up) + '), { non_consuming = true })\n'
+        + 'hl.bind("mouse_down", hl.dsp.exec_cmd(' + json.dumps(scroll_down) + '), { non_consuming = true })\n'
+        + '-- END serpantinum-addons-v2 desktop zoom scroll',
         scroll_marker + '\n'
         + 'local function desktopZoomIsActive()\n'
         + '    return hl.get_config("cursor.zoom_rigid") == true and hl.get_config("cursor.zoom_detached_camera") == false\n'
@@ -747,19 +761,14 @@ def patch_zoom_keybind(text):
         + 'hl.bind("mouse_down", function()\n'
         + '    if desktopZoomIsActive() then hl.exec_cmd(' + json.dumps(scroll_down) + ') end\n'
         + 'end, { non_consuming = true })\n'
-        + '-- END serpantinum-addons-v2 desktop zoom scroll'
-    )
-    previous_scroll_block = (
-        scroll_marker + '\n'
-        + 'hl.bind("mouse_up", hl.dsp.exec_cmd(' + json.dumps(scroll_up) + '), { non_consuming = true })\n'
-        + 'hl.bind("mouse_down", hl.dsp.exec_cmd(' + json.dumps(scroll_down) + '), { non_consuming = true })\n'
-        + '-- END serpantinum-addons-v2 desktop zoom scroll'
+        + '-- END serpantinum-addons-v2 desktop zoom scroll',
     )
     if marker in text:
         if scroll_marker in text:
             # Upgrade the earlier generated binds without overwriting user edits.
-            if previous_scroll_block in text:
-                return text.replace(previous_scroll_block, scroll_block, 1)
+            for previous in previous_scroll_blocks:
+                if previous in text:
+                    return text.replace(previous, scroll_block, 1)
             return text
         if text.count(end_marker) != 1:
             raise ValueError('Desktop zoom keybind block changed')

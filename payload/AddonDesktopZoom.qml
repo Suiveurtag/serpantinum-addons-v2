@@ -22,13 +22,13 @@ Scope {
     }
     function close() {
         active = false;
+        if (ready) Config.setSetting("addonsV2ZoomFactor", targetFactor);
         if (ready && worker.running) worker.write(JSON.stringify({close: true}) + "\n");
         else if (worker.running) worker.running = false;
     }
     function adjust(steps) {
         if (!active || !ready) return;
         targetFactor = Math.max(1, Math.min(6, targetFactor * Math.pow(1.15, steps)));
-        Config.setSetting("addonsV2ZoomFactor", targetFactor);
         worker.write(JSON.stringify({factor: targetFactor}) + "\n");
     }
     Component.onDestruction: if (worker.running) worker.running = false
