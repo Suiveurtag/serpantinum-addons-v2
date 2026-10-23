@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import "../"
@@ -21,9 +20,6 @@ Item {
     Behavior on opacity { NumberAnimation { duration: 250 } }
     readonly property string trackpadBackend: Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/trackpad.py"
     readonly property string mouseAccelerationBackend: Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/mouse_acceleration.py"
-    readonly property string customCursorBackend: Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/custom_cursor.py"
-    property string customCursorImagePath: Config.getSetting("addonsV2CustomCursorPath", "")
-    property string customCursorError: ""
     property var trackpadSettings: ({speed: 0, disableWhileTyping: false, disableClicksWhileTyping: false})
     property var trackpadDevices: []
     property string trackpadRevision: ""
@@ -81,17 +77,6 @@ Item {
         })];
         mouseAccelerationApply.running = true;
     }
-    function applyCustomCursor(path) {
-        if (!path || customCursorApply.running) return;
-        customCursorApply.command = ["python3", customCursorBackend, "apply", path];
-        customCursorApply.running = true;
-    }
-    function selectCustomCursor(path) {
-        if (!path || path === customCursorImagePath) return;
-        customCursorImagePath = path;
-        Config.setSetting("addonsV2CustomCursorPath", path);
-        applyCustomCursor(path);
-    }
     Process {
         id: trackpadStatus
         command: ["python3", root.trackpadBackend, "status"]
@@ -112,11 +97,6 @@ Item {
         stdout: StdioCollector { onStreamFinished: root.acceptMouseAcceleration(text, true) }
         onExited: (exitCode, exitStatus) => { if (exitCode !== 0) root.refreshMouseAcceleration(); }
     }
-    Process {
-        id: customCursorApply
-        stderr: StdioCollector { onStreamFinished: root.customCursorError = text.trim() }
-        onExited: (exitCode, exitStatus) => { if (exitCode === 0) root.customCursorError = "" }
-    }
     Timer { id: trackpadDebounce; interval: 350; onTriggered: root.saveTrackpad() }
     onVisibleChanged: {
         if (visible) {
@@ -128,122 +108,11 @@ Item {
         refreshTrackpad();
         refreshMouseAcceleration();
     }
-    ImagePicker {
-        id: customCursorImagePicker
-        rootObj: root.rootObj
-        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"]
-        onImageSelected: function(filePath, fileName) {
-            root.selectCustomCursor(filePath);
-        }
-    }
     Flickable {
         anchors.fill: parent; anchors.margins: rootObj.s(24); contentWidth: width; contentHeight: settings.implicitHeight; clip: true
         ColumnLayout {
             id: settings; width: parent.width; spacing: rootObj.s(8)
-            SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_custom_cursor"; searchTab: "addons"
-                searchKeywords: "custom cursor pointer image souris curseur image"
-                title: qsTr("Custom cursor"); description: root.customCursorError || qsTr("Choose cursor image"); icon: "󰆹"; wrapText: true
-                RowLayout {
-                    spacing: root.rootObj.s(12)
-
-                    ColumnLayout {
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        spacing: root.rootObj.s(8)
-
-                        ClickButton {
-                            Layout.alignment: Qt.AlignRight
-                            implicitHeight: root.rootObj.s(32)
-                            buttonText: qsTr("Select")
-                            buttonIcon: "󰉋"
-                            accentColor: ThemeBackend.mauve
-                            textColor: ThemeBackend.crust
-                            cornerRadius: ThemeBackend.borderRadius
-                            horizontalPadding: root.rootObj.s(14)
-                            iconFontSize: root.rootObj.s(15)
-                            textFontSize: root.rootObj.s(11)
-                            onTriggered: customCursorImagePicker.openPicker(root.customCursorImagePath)
-                        }
-
-                        Dropdown {
-                            id: customCursorPathDropdown
-                            Layout.alignment: Qt.AlignRight
-                            implicitWidth: root.rootObj.s(280)
-                            implicitHeight: root.rootObj.s(32)
-                            options: root.customCursorImagePath !== "" ? [root.customCursorImagePath] : []
-                            currentIndex: 0
-                            isPathSelector: true
-                            fuzzySearch: true
-                            placeholderText: root.customCursorImagePath !== "" ? root.customCursorImagePath : qsTr("Select image path...")
-                            fontFamily: ThemeBackend.fontFamily
-                            accentColor: ThemeBackend.mauve
-                            baseColor: ThemeBackend.surface0
-                            hoverColor: ThemeBackend.surface1
-                            dropdownColor: ThemeBackend.surface0
-                            borderColor: Qt.alpha(ThemeBackend.surface2, 0.6)
-                            textColor: ThemeBackend.text
-                            activeTextColor: ThemeBackend.crust
-                            cornerRadius: ThemeBackend.borderRadius
-                            fontPixelSize: root.rootObj.s(11)
-                            onValueChanged: function(index, value) { root.selectCustomCursor(value); }
-                            onSelected: function(index, value) { root.selectCustomCursor(value); }
-                        }
-                    }
-
-                    Rectangle {
-                        id: customCursorPreviewRect
-                        Layout.preferredWidth: root.rootObj.s(72)
-                        Layout.preferredHeight: root.rootObj.s(72)
-                        radius: ThemeBackend.borderRadius
-                        color: ThemeBackend.surface0
-                        border.color: Qt.alpha(ThemeBackend.surface2, 0.6)
-                        border.width: 1
-
-                        Rectangle {
-                            id: customCursorMask
-                            anchors.fill: parent
-                            radius: ThemeBackend.borderRadius
-                            color: "black"
-                            visible: false
-                            layer.enabled: true
-                        }
-
-                        Loader {
-                            id: customCursorPreviewLoader
-                            anchors.fill: parent
-                            visible: false
-                            active: root.customCursorImagePath !== ""
-                            sourceComponent: Image {
-                                source: root.customCursorImagePath !== "" ? "file://" + root.customCursorImagePath : ""
-                                sourceSize: Qt.size(root.rootObj.s(64), root.rootObj.s(64))
-                                fillMode: Image.PreserveAspectFit
-                                asynchronous: true
-                                cache: false
-                            }
-                        }
-
-                        MultiEffect {
-                            anchors.fill: parent
-                            source: customCursorPreviewLoader.status === Loader.Ready ? customCursorPreviewLoader.item : null
-                            maskEnabled: true
-                            maskSource: customCursorMask
-                            visible: customCursorPreviewLoader.status === Loader.Ready
-                                     && customCursorPreviewLoader.item.status !== Image.Error
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            visible: root.customCursorImagePath === ""
-                                     || (customCursorPreviewLoader.status === Loader.Ready
-                                         && customCursorPreviewLoader.item.status === Image.Error)
-                            text: "󰍽"
-                            font.family: "Iosevka Nerd Font"
-                            font.pixelSize: root.rootObj.s(28)
-                            color: ThemeBackend.subtext0
-                        }
-                    }
-                }
-            }
+            AddonCursorSettings { rootObj: root.rootObj; Layout.fillWidth: true }
             SettingsGroup {
                 rootObj: root.rootObj; title: "Mouse spotlight"; icon: "󰍽"
                 description: "Animated pointer highlight"

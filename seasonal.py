@@ -27,7 +27,8 @@ def patch_palette(text):
     colors = re.findall(pattern, text)
     legacy_access = text.count('root[propName]') == 2
     current_access = text.count('root[names[i]]') == 1 and text.count('root[item.name]') == 1
-    if len(colors) != 22 or not (legacy_access or current_access):
+    queued_access = text.count('root[slot]') == 1 and text.count('root[item.name]') == 1
+    if len(colors) != 22 or not (legacy_access or current_access or queued_access):
         raise ValueError('ThemeBackend palette storage changed')
     text = re.sub(pattern, lambda m: (
         f'    property color _normal{m[1]}: {m[2]}\n'
@@ -36,6 +37,7 @@ def patch_palette(text):
     text = text.replace('root[propName]', 'root["_normal" + propName]')
     text = text.replace('root[names[i]]', 'root["_normal" + names[i]]')
     text = text.replace('root[item.name]', 'root["_normal" + item.name]')
+    text = text.replace('root[slot]', 'root["_normal" + slot]')
     return text.replace('    id: root\n', f'    id: root\n    // BEGIN {MARK} palette\n    // Normal preset values are never overwritten by the seasonal palette.\n    // END {MARK} palette\n', 1)
 
 
@@ -219,42 +221,33 @@ def patch_network(text):
 
 
 def patch_music(text):
-    text = insert(text, '                        id: coverHost\n', ('album reflection', '''                        Loader {
-                            id: seasonalReflection
-                            enabled: false
-                            anchors.centerIn: parent
-                            width: coverHost.artRadius * 2; height: width
-                            z: 7
-                            active: Halloween.activeSeason && root.active
-                            sourceComponent: GlassReflection {}
-                        }
-                        Connections {
-                            target: root
-                            function onActiveArtUrlChanged() {
-                                if (seasonalReflection.item) seasonalReflection.item.sweep();
-                            }
-                        }
+    if 'id: coverHost' in text:
+        return text
+    text = insert(text, '    id: coverHost\n', ('album reflection', '''    Loader {
+        id: seasonalReflection
+        enabled: false
+        anchors.centerIn: discAndVisGroup
+        width: coverHost.artRadius * 2; height: width
+        z: 7
+        active: Halloween.activeSeason && root.active
+        sourceComponent: GlassReflection {}
+    }
+    Connections {
+        target: root
+        function onActiveArtUrlChanged() {
+            if (seasonalReflection.item) seasonalReflection.item.sweep();
+        }
+    }
 '''))
-    text = insert(text, '                        id: coverHost\n', ('album corona', '''                        Loader {
-                            enabled: false
-                            anchors.fill: parent; z: 8
-                            active: Halloween.activeSeason && root.active
-                            sourceComponent: MusicAura {
-                                playing: !!(root.targetPlayer && root.targetPlayer.isPlaying)
-                                energy: root.bassLevel
-                            }
-                        }
-'''))
-    return insert(text, '            id: innerBg\n', ('music vapor', '''            Loader {
-                enabled: false
-                anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width * 0.88; height: parent.height * 0.18
-                active: Halloween.activeSeason && root.active
-                sourceComponent: HearthGlow {
-                    intensity: 0.36 + root.bassLevel * 0.25
-                    engaged: !!(root.targetPlayer && root.targetPlayer.isPlaying)
-                }
-            }
+    return insert(text, '    id: coverHost\n', ('album corona', '''    Loader {
+        enabled: false
+        anchors.fill: parent; z: 8
+        active: Halloween.activeSeason && root.active
+        sourceComponent: MusicAura {
+            playing: !!(root.targetPlayer && root.targetPlayer.isPlaying)
+            energy: root.bassLevel
+        }
+    }
 '''))
 
 
@@ -365,7 +358,7 @@ def transformations(qs):
             qs/'launcher/Launcher.qml': patch_launcher,
             qs/'network/NetworkPopup.qml': patch_network,
             qs/'syspanel/SystemPanelPowerActions.qml': patch_power_actions,
-            qs/'media/MusicPopup.qml': patch_music,
+            qs/'media/MusicCover.qml': patch_music,
             qs/'syspanel/SystemPanel.qml': patch_system,
             qs/'widgets/faces/user/UserFace.qml': patch_user_face,
             qs/'widgets/Widget.qml': patch_widgets,
