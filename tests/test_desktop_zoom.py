@@ -32,7 +32,7 @@ class ZoomTests(unittest.TestCase):
         self.assertEqual(installer.patch_zoom_keybind(custom), custom)
         with self.assertRaises(ValueError):
             installer.patch_zoom_keybind('hl.bind("SUPER + SHIFT + Z", action)')
-        shell = installer.patch_shell('    ScreenshotOverlay {}\n')
+        shell = installer.patch_shell('ShellRoot {\n    Main {}\n}\n')
         self.assertEqual(installer.patch_shell(shell), shell)
         self.assertEqual(shell.count('AddonDesktopZoom {}'), 1)
 

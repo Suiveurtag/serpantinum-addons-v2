@@ -2,14 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
 import "../"
+import "../reusables"
 
-Rectangle {
+AddonGlassSurface {
     id: card
     required property var rootObj
     Layout.fillWidth: true
     implicitHeight: rootObj.s(180)
     radius: rootObj.s(18)
-    color: ThemeBackend.surface0
+    surfaceColor: ThemeBackend.surface0
     clip: true
     layer.enabled: true
     layer.effect: MultiEffect { maskEnabled: true; maskSource: roundedMask }
@@ -17,6 +18,7 @@ Rectangle {
     Image {
         anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
         width: parent.width*0.48
+        sourceSize: Qt.size(width, height)
         source: Halloween.artwork
         fillMode: Image.PreserveAspectCrop
         asynchronous: true; mipmap: true
@@ -26,8 +28,8 @@ Rectangle {
         anchors.fill: parent
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: ThemeBackend.surface0 }
-            GradientStop { position: 0.5; color: ThemeBackend.surface0 }
+            GradientStop { position: 0; color: ThemeBackend.liquidGlass ? Qt.alpha(ThemeBackend.base, 0.16) : ThemeBackend.surface0 }
+            GradientStop { position: 0.5; color: ThemeBackend.liquidGlass ? Qt.alpha(ThemeBackend.base, 0.16) : ThemeBackend.surface0 }
             GradientStop { position: 1; color: "transparent" }
         }
     }

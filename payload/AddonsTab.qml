@@ -50,12 +50,12 @@ Item {
                     onToggled: { Config.setSetting("addonsV2LegacyClock", checked); }
                 }
             }
-            Rectangle {
+            AddonGlassSurface {
                 id: passiveAddonsCard
                 Layout.fillWidth: true
                 Layout.topMargin: rootObj.s(18)
                 radius: ThemeBackend.borderRadius
-                color: Qt.alpha(ThemeBackend.surface0, 0.72)
+                surfaceColor: Qt.alpha(ThemeBackend.surface0, 0.72)
                 border.width: rootObj.s(1)
                 border.color: Qt.alpha(ThemeBackend.surface2, 0.55)
                 implicitHeight: passiveContent.implicitHeight + rootObj.s(28)
@@ -69,11 +69,11 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: rootObj.s(10)
-                        Rectangle {
+                        AddonGlassSurface {
                             Layout.preferredWidth: rootObj.s(34)
                             Layout.preferredHeight: rootObj.s(34)
                             radius: ThemeBackend.borderRadius
-                            color: ThemeBackend.surface1
+                            surfaceColor: ThemeBackend.surface1
                             Text {
                                 anchors.centerIn: parent
                                 text: "󰐱"
@@ -102,12 +102,12 @@ Item {
                         }
                     }
 
-                    Rectangle {
+                    AddonGlassSurface {
                         Layout.fillWidth: true
                         Layout.topMargin: rootObj.s(2)
                         Layout.bottomMargin: rootObj.s(2)
                         height: rootObj.s(1)
-                        color: Qt.alpha(ThemeBackend.surface2, 0.65)
+                        surfaceColor: Qt.alpha(ThemeBackend.surface2, 0.65)
                     }
 
                     Repeater {
@@ -131,11 +131,11 @@ Item {
                             titlePixelSize: 12; descriptionPixelSize: 10
                             baseColor: "transparent"; hoverColor: "transparent"
 
-                            Rectangle {
+                            AddonGlassSurface {
                                 Layout.preferredWidth: enabledLabel.implicitWidth + rootObj.s(18)
                                 Layout.preferredHeight: rootObj.s(24)
                                 radius: ThemeBackend.borderRadius
-                                color: Qt.alpha(ThemeBackend.green, 0.13)
+                                surfaceColor: Qt.alpha(ThemeBackend.green, 0.13)
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: rootObj.s(5)

@@ -10,6 +10,7 @@ import stat
 import tempfile
 import seasonal
 import seasonal_surfaces
+import wallpaper_engine
 from datetime import datetime
 from pathlib import Path
 
@@ -48,14 +49,27 @@ def patch_guide(text):
             text = text.replace(addons_entry, addons_entry_with_subtabs, 1)
         if '// BEGIN serpantinum-addons-v2 tabs' not in text:
             anchor = '        { id: "About", key: "about", name: "About", icon: "󰋽", file: "AboutTab.qml", iconOffsetX: 0 }'
-            if text.count(anchor) != 1: raise ValueError('Guide tabs model anchor changed')
             block = '''        // BEGIN serpantinum-addons-v2 tabs
 ''' + addons_entry_with_subtabs + '''
         { id: "Monitors", key: "addon_monitors", name: "Monitors", icon: "󰍹", file: "AddonMonitorsTab.qml", iconOffsetX: 0 },
         { id: "Keybinds", key: "addon_keybinds", name: "Keybinds", icon: "󰌌", file: "AddonKeybindsTab.qml", iconOffsetX: 0 },
         // END serpantinum-addons-v2 tabs
 '''
-            text = text.replace(anchor, block + anchor, 1)
+            if text.count(anchor) == 1:
+                text = text.replace(anchor, block + anchor, 1)
+            else:
+                # Recent upstream Guide versions omit iconOffsetX from model
+                # entries, so keep the About row as the insertion anchor by
+                # its stable identity and file instead of its full formatting.
+                about = re.compile(
+                    r'(?m)^[ \t]*\{ id: "About", key: "about", name: "About", '
+                    r'icon: "[^"]+"(?:, separatorBefore: true)?, file: "AboutTab\.qml"(?:, iconOffsetX: 0)? \},?$'
+                )
+                matches = list(about.finditer(text))
+                if len(matches) != 1:
+                    raise ValueError('Guide tabs model anchor changed')
+                match = matches[0]
+                text = text[:match.start()] + block + match.group(0) + text[match.end():]
         old = '                return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
         new = '''                let key = "guide.tabs." + (t.key || t.id).toLowerCase();
                 let label = I18n.t(key);
@@ -130,6 +144,7 @@ def patch_guide(text):
 
 
 def patch_guide_sidebar(text):
+    subtab_id = 'sub' if 'id: sub\n' in text else 'subtabItem'
     changes = [
         (
             'text: I18n.t("guide.tabs." + (tabDelegate.modelData.key || tabDelegate.modelData.id).toLowerCase(), tabDelegate.modelData.name || tabDelegate.modelData.id)',
@@ -137,9 +152,9 @@ def patch_guide_sidebar(text):
             'text: popup.resolveTabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id)' in text,
         ),
         (
-            'text: I18n.t("guide.tabs." + (subtabItem.modelData.key || subtabItem.modelData.id).toLowerCase(), subtabItem.modelData.name || subtabItem.modelData.id)',
-            'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, subtabItem.modelData.key || subtabItem.modelData.id)',
-            'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, subtabItem.modelData.key || subtabItem.modelData.id)' in text,
+            f'text: I18n.t("guide.tabs." + ({subtab_id}.modelData.key || {subtab_id}.modelData.id).toLowerCase(), {subtab_id}.modelData.name || {subtab_id}.modelData.id)',
+            f'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, {subtab_id}.modelData.key || {subtab_id}.modelData.id)',
+            f'text: popup.resolveSubtabTitle(tabDelegate.modelData.key || tabDelegate.modelData.id, {subtab_id}.modelData.key || {subtab_id}.modelData.id)' in text,
         ),
     ]
     for old, new, already_patched in changes:
@@ -166,6 +181,7 @@ def patch_idle_tab(text):
     if marker in text:
         option_start = text.rfind('            SettingsRow {', 0, text.index(marker))
         if option_start < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
+        option_start = text.rfind('\n', 0, option_start) + 1
         depth = 0
         option_end = -1
         for index in range(text.index('{', option_start), len(text)):
@@ -177,7 +193,7 @@ def patch_idle_tab(text):
                     break
         if option_end < 0: raise ValueError('Do Not Disturb companion option boundaries changed')
         option = text[option_start:option_end]
-        text = text[:option_start] + text[option_end:]
+        text = text[:option_start].rstrip() + '\n' + text[option_end:].lstrip('\n')
         option = option.replace('searchKeywords: "keep awake suspend lid closed download network"', 'searchKeywords: "codex mode keep awake suspend lid closed download network ai workflow"', 1)
         option = option.replace('title: "Keep system awake"', 'title: "Codex mode"', 1)
         option = option.replace('                icon: "󰒲"', '                icon: "󰖙"', 1)
@@ -339,12 +355,12 @@ def patch_idle_tab(text):
                         }'''
     if 'id: addonBadgeMask' not in option:
         option = option.replace('                        border.width: 1\n                        clip: true', '                        border.width: 1\n' + rounded_mask, 1)
-    option = option.replace('            SettingsRow {', '                SettingsRow {', 1)
+    option = '                ' + option.strip()
     inhibit_position = text.index('settingId: "idle_manual_inhibit"')
     rectangle_position = text.index(rectangle_anchor, inhibit_position)
     option_anchor = text.rfind('            }', inhibit_position, rectangle_position)
     if option_anchor < 0: raise ValueError('Do Not Disturb settings group anchor changed')
-    text = text[:option_anchor] + option + '\n' + text[option_anchor:]
+    text = text[:option_anchor].rstrip() + '\n\n' + option + '\n' + text[option_anchor:]
     default_anchor = '        "manualInhibit": false,'
     if '"keepSystemAwake": false,' not in text:
         if text.count(default_anchor) != 1: raise ValueError('Idle setting defaults anchor changed')
@@ -372,19 +388,22 @@ def patch_main(text):
 
 def patch_network(text):
     if '// BEGIN ' + MARK + ' dns' in text: return text
-    anchor = '    id: window\n'
-    if text.count(anchor) != 1: raise ValueError('Network root anchor changed')
+    import re
+    anchors = list(re.finditer(r'(?m)^    id: (window|popupWindowRoot)\n', text))
+    if len(anchors) != 1: raise ValueError('Network root anchor changed')
+    root_id = anchors[0].group(1)
     block = '''
     // BEGIN serpantinum-addons-v2 dns
     DnsControl {
         anchors.right: parent.right; anchors.top: parent.top
-        anchors.rightMargin: window.s(18); anchors.topMargin: window.s(16)
-        width: window.s(160); height: window.s(32); z: 100
-        visible: window.activeMode === "wifi" || window.activeMode === "eth"
-        pollEnabled: window.visible && visible
+        anchors.rightMargin: %s.s(18); anchors.topMargin: %s.s(16)
+        width: %s.s(160); height: %s.s(32); z: 100
+        visible: %s.activeMode === "wifi" || %s.activeMode === "eth"
+        pollEnabled: %s.visible && visible
     }
     // END serpantinum-addons-v2 dns
-'''
+''' % (root_id, root_id, root_id, root_id, root_id, root_id, root_id)
+    anchor = anchors[0].group(0)
     return text.replace(anchor, anchor + block, 1)
 
 
@@ -422,14 +441,36 @@ def patch_weather_face(text):
     matches = list(pattern.finditer(text))
     if matches:
         if len(matches) != 1: raise ValueError('Weather city patch markers are duplicated')
-        return pattern.sub(replacement, text, count=1)
+        return pattern.sub(lambda match: replacement + ('\n' if match.group(0).endswith('\n') else ''), text, count=1)
     if text.count(anchor) != 1: raise ValueError('Weather city label anchor changed')
     return text.replace(anchor, replacement, 1)
 
 
 def patch_theme(text):
     import re
-    text = re.sub(r'                        // BEGIN serpantinum-addons-v2 theme.*?                        // END serpantinum-addons-v2 theme\n', '', text, flags=re.S)
+    text = re.sub(r'                        // BEGIN serpantinum-addons-v2 theme\n.*?                        // END serpantinum-addons-v2 theme\n', '', text, flags=re.S)
+    text = text.replace('themeTabRoot.systemPresets = sys;', 'themeTabRoot.systemPresets = sys.slice();')
+    state_video_anchor = '                    Matugen.generate(themeTabRoot.currentWallpaperPath, current.mode, current.schemeType);'
+    state_video_marker = '// BEGIN serpantinum-addons-v2 Matugen video wallpaper source'
+    if state_video_marker not in text:
+        if text.count(state_video_anchor) == 1:
+            text = text.replace(state_video_anchor, '''                    // BEGIN serpantinum-addons-v2 Matugen video wallpaper source
+                    let imagePath = themeTabRoot.isWallpaperVideo
+                        ? Caching.getCacheDir("wallpaper") + "/current_wallpaper.png"
+                        : themeTabRoot.currentWallpaperPath;
+                    Matugen.generate(imagePath, current.mode, current.schemeType);
+                    // END serpantinum-addons-v2 Matugen video wallpaper source''', 1)
+        elif state_video_marker not in text:
+            # The former installer targeted ThemeTab.qml, where this generation
+            # call used to live. The current upstream places it in ThemeTabState.qml.
+            old_anchor = '                    Matugen.generate(themeTabRoot.currentWallpaperPath, current.mode, current.schemeType);'
+            if text.count(old_anchor) != 1: raise ValueError('Matugen wallpaper generation anchor changed')
+            text = text.replace(old_anchor, '''                    // BEGIN serpantinum-addons-v2 Matugen video wallpaper source
+                    let imagePath = themeTabRoot.isWallpaperVideo
+                        ? Caching.getCacheDir("wallpaper") + "/current_wallpaper.png"
+                        : themeTabRoot.currentWallpaperPath;
+                    Matugen.generate(imagePath, current.mode, current.schemeType);
+                    // END serpantinum-addons-v2 Matugen video wallpaper source''', 1)
     if '// BEGIN serpantinum-addons-v2 theme cards' in text:
         return text.replace('themeTabRoot.systemPresets = sys;', 'themeTabRoot.systemPresets = sys.slice();')
     anchor = '                        themeTabRoot.userPresets = usr;'
@@ -739,7 +780,9 @@ def patch_draw_keybind(text):
 
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
-    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, QS/'guide/theme/ThemeTab.qml': patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
+    theme_state = QS/'guide/theme/ThemeTabState.qml'
+    theme_view = QS/'guide/theme/ThemeTab.qml'
+    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, (theme_state if theme_state.exists() else theme_view): patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
@@ -749,7 +792,23 @@ def install(without_halloween=False):
         text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
     payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonsMouseTab.qml': 'guide/AddonsMouseTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    for component in ('AddonCursorSettings', 'AddonCursorPreview', 'AddonCursorRole', 'AddonCursorTestArea'):
+        payloads[component + '.qml'] = 'guide/' + component + '.qml'
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
+    pending[QS/'reusables/AddonGlassSurface.qml'] = (SOURCE/'payload/AddonGlassSurface.qml').read_text()
+    reusable_qmldir = QS/'reusables/qmldir'
+    reusable_types = pending.get(reusable_qmldir, reusable_qmldir.read_text())
+    declaration = 'AddonGlassSurface 1.0 AddonGlassSurface.qml'
+    if declaration not in reusable_types:
+        reusable_types = reusable_types.rstrip() + '\n' + declaration + '\n'
+    pending[reusable_qmldir] = reusable_types
+    guide_qmldir = QS/'guide/qmldir'
+    guide_types = pending.get(guide_qmldir, guide_qmldir.read_text())
+    for component in ('AddonCursorSettings', 'AddonCursorPreview', 'AddonCursorRole', 'AddonCursorTestArea'):
+        declaration = component + ' 1.0 ' + component + '.qml'
+        if declaration not in guide_types:
+            guide_types = guide_types.rstrip() + '\n' + declaration + '\n'
+    pending[guide_qmldir] = guide_types
     # NativeCalendar is captured before installing the wrapper, then patched in
     # memory. The native UI remains the source of truth for both seasonal states.
     native_calendar = QS/'calendar/NativeCalendar.qml'
@@ -780,7 +839,7 @@ def install(without_halloween=False):
         pending[qmldir] += '\nAddonAwake 1.0 AddonAwake.qml\n'
     for folder in ('guide', 'network'):
         directory = QS/folder/'qmldir'
-        original = directory.read_text() if directory.exists() else ''
+        original = pending.get(directory, directory.read_text() if directory.exists() else '')
         pending[directory] = original if 'DnsControl 1.0 DnsControl.qml' in original else original + '\nDnsControl 1.0 DnsControl.qml\n'
     # Read and verify all payloads before touching the installation. A forgotten
     # shader rebuild or missing resource must never leave partly applied hooks.
@@ -797,6 +856,9 @@ def install(without_halloween=False):
             elif source.name == 'FogLayer.qml':
                 blob = blob.replace(b'shaders/atmosphere.frag.qsb', ('shaders/' + shader_name).encode())
         resource_payloads.append((path, blob))
+    bridge = HOME/'.local/lib/qt6/qml/Serpantinum/Wallpaper/libSerpantinumWallpaperplugin.so'
+    if bridge.is_file():
+        wallpaper_engine.prepare(pending, QS, DEPLOY, HOME/'.local')
     backup = DEPLOY/'backups'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     changed = 0
     for path, text in pending.items():

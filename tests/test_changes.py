@@ -47,9 +47,10 @@ class ChangeTests(unittest.TestCase):
             with self.subTest(option=option):
                 self.assertIn(option, general)
         for option in ('addons_mouse_spotlight', 'addons_mouse_acceleration', 'addons_trackpad_speed',
-                       'addons_trackpad_typing', 'addons_trackpad_clicks_typing', 'addons_legacy_clock'):
+                       'addons_trackpad_typing', 'addons_trackpad_clicks_typing'):
             with self.subTest(option=option):
                 self.assertIn(option, mouse)
+        self.assertIn('addons_legacy_clock', general)
         self.assertIn('SettingsGroup {', mouse)
         self.assertIn('spacing: rootObj.s(8)', mouse)
         self.assertIn('Layout.bottomMargin: rootObj.s(6)', general)
@@ -63,11 +64,31 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(weather, installer.patch_weather_face(weather))
 
     def test_theme_uses_original_tile_delegate(self):
-        text = (installer.QS/'guide/theme/ThemeTab.qml').read_text()
+        theme = installer.QS/'guide/theme/ThemeTabState.qml'
+        text = (theme if theme.exists() else installer.QS/'guide/theme/ThemeTab.qml').read_text()
+        text = installer.patch_theme(text)
         self.assertEqual(text, installer.patch_theme(text))
         self.assertNotIn('options: ["Matugen", "Vibrant", "Vivid"]', text)
         self.assertIn('{name: "Vibrant", isMatugen: true', text)
         self.assertIn('systemPresets = sys.slice()', text)
+
+    def test_settings_sidebar_resolves_addon_titles(self):
+        text = (installer.QS/'guide/GuideSidebar.qml').read_text()
+        patched = installer.patch_guide_sidebar(text)
+        self.assertEqual(patched, installer.patch_guide_sidebar(patched))
+        self.assertIn('text: popup.resolveTabTitle(', patched)
+        self.assertIn('text: popup.resolveSubtabTitle(', patched)
+
+    def test_native_patches_do_not_change_on_reinstall(self):
+        patches = {
+            'guide/IdleTab.qml': installer.patch_idle_tab,
+            'guide/theme/ThemeTabState.qml': installer.patch_theme,
+            'widgets/faces/weather/WeatherFaceFull.qml': installer.patch_weather_face,
+        }
+        for path, patch in patches.items():
+            with self.subTest(path=path):
+                patched = patch((installer.QS/path).read_text())
+                self.assertEqual(patched, patch(patched))
 
     def test_key_edits_preserve_action_flags_and_generated_bindings(self):
         old_config, old_state, old_run = control.CONFIG, control.STATE, control.run

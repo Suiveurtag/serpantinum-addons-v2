@@ -1,5 +1,6 @@
 import QtQuick
 import "../"
+import "../reusables"
 
 Item {
     id: control
@@ -19,14 +20,14 @@ Item {
     function toggle() { Config.setSetting("addonsV2Halloween", !checked); }
     Keys.onSpacePressed: toggle()
     Keys.onReturnPressed: toggle()
-    Rectangle {
+    AddonGlassSurface {
         id: track
         anchors.centerIn: parent
         width: control.u(72); height: control.u(36); radius: height / 2
-        color: control.checked ? "#4e342a" : ThemeBackend.crust
+        surfaceColor: control.checked ? "#4e342a" : ThemeBackend.crust
         border.width: control.activeFocus ? 2 : 1.5
         border.color: control.activeFocus ? ThemeBackend.text : (control.checked ? Halloween.candle : ThemeBackend.overlay0)
-        Behavior on color { ColorAnimation { duration: 240 } }
+        Behavior on surfaceColor { ColorAnimation { duration: 240 } }
         Text {
             anchors.verticalCenter: parent.verticalCenter
             x: control.checked ? control.u(10) : track.width-width-control.u(8)
@@ -35,12 +36,12 @@ Item {
             color: control.checked ? Halloween.candle : ThemeBackend.subtext0
             opacity: Math.abs(control.ignition-0.5)*1.6+0.2
         }
-        Rectangle {
+        AddonGlassSurface {
             width: parent.height - control.u(8); height: width; radius: width / 2
             anchors.verticalCenter: parent.verticalCenter
             x: control.u(4) + control.ignition * (track.width - width - control.u(8))
-            color: control.checked ? Halloween.candle : ThemeBackend.subtext1
-            Behavior on color { ColorAnimation { duration: 240 } }
+            surfaceColor: control.checked ? Halloween.candle : ThemeBackend.subtext1
+            Behavior on surfaceColor { ColorAnimation { duration: 240 } }
 
         }
     }
