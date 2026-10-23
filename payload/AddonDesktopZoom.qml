@@ -16,7 +16,7 @@ Scope {
     function open() {
         if (worker.running) return;
         ready = false;
-        targetFactor = Math.max(1, Math.min(6, Config.getSetting("addonsV2ZoomFactor", 2)));
+        targetFactor = Math.max(1.15, Math.min(6, Config.getSetting("addonsV2ZoomFactor", 2)));
         active = true;
         worker.running = true;
     }
@@ -29,6 +29,12 @@ Scope {
     function adjust(steps) {
         if (!active || !ready) return;
         targetFactor = Math.max(1, Math.min(6, targetFactor * Math.pow(1.15, steps)));
+        // Fully zoomed out: close, and reopen next time at a small level instead of ×1.
+        if (targetFactor <= 1) {
+            targetFactor = 1.5;
+            close();
+            return;
+        }
         worker.write(JSON.stringify({factor: targetFactor}) + "\n");
     }
     Component.onDestruction: if (worker.running) worker.running = false
