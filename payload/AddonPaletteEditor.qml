@@ -38,8 +38,10 @@ SettingsBlob {
 
     visible: implicitHeight > 0.5
     opacity: shown ? 1 : 0
-    implicitHeight: shown ? editorCol.implicitHeight : 0
-    Behavior on implicitHeight { NumberAnimation { duration: 380; easing.type: Easing.OutCubic } }
+    // Progress values scale measured heights; chained height Behaviors trail each other and read as lag.
+    property real reveal: shown ? 1 : 0
+    Behavior on reveal { NumberAnimation { duration: 320; easing.type: Easing.OutQuint } }
+    implicitHeight: editorCol.implicitHeight * reveal
     Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
     function pointFor(key) {
@@ -164,7 +166,7 @@ SettingsBlob {
                 accentColor: ThemeBackend.surface0
                 textColor: isHoveredOrHighlighted || editor.expanded ? ThemeBackend.text : ThemeBackend.overlay2
                 rotation: editor.expanded ? 180 : 0
-                Behavior on rotation { NumberAnimation { duration: 360; easing.type: Easing.OutBack } }
+                Behavior on rotation { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.6 } }
                 onClicked: editor.expanded = !editor.expanded
             }
         }
@@ -172,17 +174,21 @@ SettingsBlob {
         Item {
             id: body
             Layout.fillWidth: true
-            Layout.preferredHeight: editor.expanded ? bodyCol.implicitHeight : 0
+            property real openAmount: editor.expanded ? 1 : 0
+            Behavior on openAmount { NumberAnimation { duration: editor.expanded ? 340 : 230; easing.type: editor.expanded ? Easing.OutQuint : Easing.OutCubic } }
+            Layout.preferredHeight: bodyCol.implicitHeight * openAmount
             clip: true
-            opacity: editor.expanded ? 1 : 0
-            visible: Layout.preferredHeight > 0.5
-            Behavior on Layout.preferredHeight { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: editor.expanded ? 360 : 200; easing.type: Easing.OutCubic } }
+            opacity: Math.min(1, openAmount * 1.8)
+            visible: openAmount > 0.001
 
             ColumnLayout {
                 id: bodyCol
                 width: parent.width
                 spacing: 0
+                // Content glides down into the opening space rather than being uncovered in place.
+                y: -rootObj.s(18) * (1 - body.openAmount)
+                scale: 0.97 + 0.03 * body.openAmount
+                transformOrigin: Item.Top
 
                 Item {
                     id: stage
@@ -379,8 +385,8 @@ SettingsBlob {
                             Behavior on scale { enabled: dot.appear === 1; NumberAnimation { duration: 240; easing.type: Easing.OutBack; easing.overshoot: 2.2 } }
                             SequentialAnimation {
                                 running: editor.shown && editor.expanded && editor.pointsCurrent
-                                PauseAnimation { duration: 120 + dot.index * 38 }
-                                NumberAnimation { target: dot; property: "appear"; from: 0; to: 1; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 2.6 }
+                                PauseAnimation { duration: 40 + dot.index * 22 }
+                                NumberAnimation { target: dot; property: "appear"; from: 0; to: 1; duration: 320; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
                             }
                             Connections {
                                 target: editor
