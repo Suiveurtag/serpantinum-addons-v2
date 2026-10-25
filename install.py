@@ -831,11 +831,91 @@ def patch_draw_keybind(text):
     return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 desktop draw\n'
 
 
+def patch_inline_settings_registry(text):
+    # Pre-2.3 layout: Settings lived in the shell's master window as "guide".
+    marker = '        // BEGIN serpantinum-addons-v2 inline settings'
+    if marker in text: return text
+    anchor = '        "calendar": { '
+    if text.count(anchor) != 1: raise ValueError('Window registry calendar anchor changed')
+    entry = marker + '''
+        "guide": {
+            w: 1200, h: 750, comp: "guide/GuidePopup.qml", draggable: true,
+            pos: {
+                "top": { anchor: "center" },
+                "bottom": { anchor: "center" },
+                "left": { anchor: "center" },
+                "right": { anchor: "center" }
+            }
+        },
+        // END serpantinum-addons-v2 inline settings
+'''
+    return text.replace(anchor, entry + anchor, 1)
+
+
+def patch_inline_settings_main(text):
+    marker = '    // BEGIN serpantinum-addons-v2 inline settings'
+    if marker in text: return text
+    # Restore the pre-2.3 guide behaviour: fixed centre, remembered drag position.
+    changes = [
+        ('let isFixed = (name === "wallpaper" ||', 'let isFixed = (name === "guide" || name === "wallpaper" ||'),
+        ('        masterWindow.userMoved = false;\n\n        if (delayedClear.running) {',
+         '        if (newWidget !== "guide") masterWindow.userMoved = false;\n\n        if (delayedClear.running) {'),
+    ]
+    anchor = '    WlrLayershell.namespace: "qs-master"\n'
+    for old, _ in changes + [(anchor, None)]:
+        if text.count(old) != 1: raise ValueError('Main inline settings anchor changed')
+    for old, new in changes: text = text.replace(old, new, 1)
+    # Its own IPC target: "settings"/"guide" commands are routed to the standalone app.
+    block = marker + '''
+    IpcHandler {
+        target: "addonInlineSettings"
+
+        function toggle(tab: string): void {
+            if (!Config.getSetting("addonsV2InlineSettings", false)) {
+                Quickshell.execDetached(["bash", Caching.serpantinumDir + "/scripts/settings.sh", "toggle", tab || ""]);
+                return;
+            }
+            if (masterWindow.targetActive !== "guide") {
+                masterWindow.switchWidget("guide", tab || "");
+            } else if (tab) {
+                let item = masterWindow.widgetCache["guide"];
+                if (item) item.gotoTab(tab);
+            } else {
+                masterWindow.switchWidget("hidden", "");
+            }
+        }
+    }
+
+    // Preloaded like before 2.3, so the panel opens instantly.
+    function addonPreloadInlineSettings() {
+        if (!Config.getSetting("addonsV2InlineSettings", false)) return;
+        let layout = masterWindow.getLayout("guide");
+        if (layout) masterWindow.ensureWidgetItem("guide", layout);
+    }
+
+    Connections {
+        target: (typeof Config !== "undefined") ? Config : null
+        function onSettingsLoaded() { Qt.callLater(masterWindow.addonPreloadInlineSettings); }
+    }
+    // END serpantinum-addons-v2 inline settings
+
+'''
+    return text.replace(anchor, block + anchor, 1)
+
+
+def patch_inline_settings_keybind(text):
+    marker = '-- BEGIN serpantinum-addons-v2 inline settings'
+    if marker in text: return text
+    if '"SUPER + SHIFT + P"' in text: raise ValueError('Inline settings shortcut already in use')
+    command = 'quickshell -p ' + shlex.quote(str(QS/'Shell.qml')) + ' ipc call addonInlineSettings toggle ""'
+    return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 inline settings\n'
+
+
 def install(without_halloween=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     theme_state = QS/'guide/theme/ThemeTabState.qml'
     theme_view = QS/'guide/theme/ThemeTab.qml'
-    patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, (theme_state if theme_state.exists() else theme_view): patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
+    patches = {QS/'Main.qml': lambda text: patch_inline_settings_main(patch_main(text)), QS/'WindowRegistry.js': patch_inline_settings_registry,QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, (theme_state if theme_state.exists() else theme_view): patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
     pending[theme_view] = patch_theme_view(pending.get(theme_view, theme_view.read_text()))
     pending[QS/'guide/theme/AddonPaletteEditor.qml'] = (SOURCE/'payload/AddonPaletteEditor.qml').read_text()
@@ -847,7 +927,7 @@ def install(without_halloween=False):
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
-    pending[keybind_path] = patch_draw_keybind(patch_zoom_keybind(patch_spotlight_keybind(patch_keybinds(keybind_path.read_text()))))
+    pending[keybind_path] = patch_inline_settings_keybind(patch_draw_keybind(patch_zoom_keybind(patch_spotlight_keybind(patch_keybinds(keybind_path.read_text())))))
     for path, transform in seasonal.transformations(QS).items():
         text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)

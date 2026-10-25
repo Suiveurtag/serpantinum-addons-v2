@@ -50,6 +50,16 @@ Item {
                     onToggled: { Config.setSetting("addonsV2LegacyClock", checked); }
                 }
             }
+            SettingsRow {
+                rootObj: root.rootObj; settingId: "addons_inline_settings"; searchTab: "addons"; searchKeywords: "settings inline legacy shell panel paramètres intégré ancien instant addonInlineSettings"
+                title: "Integrated settings panel"; description: "Super+Shift+P opens these settings inside the shell, as before 2.3. When off, it opens the app."; icon: "󰒓"
+                wrapText: true
+                Toggle {
+                    checked: Config.getSetting("addonsV2InlineSettings", false)
+                    accentColor: ThemeBackend.mauve
+                    onToggled: { Config.setSetting("addonsV2InlineSettings", checked); }
+                }
+            }
             AddonGlassSurface {
                 id: passiveAddonsCard
                 Layout.fillWidth: true
