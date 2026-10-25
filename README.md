@@ -34,7 +34,7 @@ Requires the installed Serpantinum shell, Hyprland Lua configuration, NetworkMan
 
 Monitor changes apply to `~/.config/hypr/config/monitors.lua`. Keyboard edits update literal bindings in `~/.config/hypr/config/keybinds.lua`; generated workspace loops remain intact. The layout selector updates `~/.config/hypr/config/settings.lua`, preserving other XKB options and enabling `grp:alt_shift_toggle` only while multiple layouts are selected. Changes save backups and restore the previous file if reloading reports a configuration error. Conflicting external keybind edits require reloading the editor. The installer adds the color picker shortcut to the same Hyprland file and backs up its previous version.
 
-Vibrant selects actual sampled wallpaper colors as accents. Vivid retains their hue while increasing saturation and brightness. Shell surfaces and text retain the upstream palette for readability; synthetic Matugen templates update application colors alongside the shell. Matugen mode follows the native generator.
+Vibrant selects actual sampled wallpaper colors as accents. Vivid retains their hue while increasing saturation and brightness. Shell surfaces and text retain the upstream palette for readability; synthetic Matugen templates update application colors alongside the shell. Matugen mode follows the native generator. With Vibrant or Vivid active, Settings → Theme shows a Wallpaper accents editor: drag a point onto the wallpaper to choose where each accent is sampled, double-click a point (or right-click its chip) to restore it. Choices are saved per wallpaper in `~/.local/state/serpantinum/addons_v2_palette_overrides.json`.
 
 ## Validation
 

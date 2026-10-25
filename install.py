@@ -496,6 +496,17 @@ def patch_theme(text):
     return text
 
 
+def patch_theme_view(text):
+    if '// BEGIN ' + MARK + ' palette editor' in text: return text
+    anchor = '            ThemeWallpaperPreview { tab: themeTabRoot }\n'
+    if text.count(anchor) != 1: raise ValueError('Theme wallpaper preview anchor changed')
+    return text.replace(anchor, anchor + '''
+            // BEGIN serpantinum-addons-v2 palette editor
+            AddonPaletteEditor { tab: themeTabRoot }
+            // END serpantinum-addons-v2 palette editor
+''', 1)
+
+
 def patch_matugen(text):
     if '// BEGIN ' + MARK + ' generation' not in text:
         text = patch_matugen_generation(text)
@@ -826,6 +837,13 @@ def install(without_halloween=False):
     theme_view = QS/'guide/theme/ThemeTab.qml'
     patches = {QS/'Main.qml': patch_main, QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, (theme_state if theme_state.exists() else theme_view): patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}
     pending = {path: transform(path.read_text()) for path, transform in patches.items()}
+    pending[theme_view] = patch_theme_view(pending.get(theme_view, theme_view.read_text()))
+    pending[QS/'guide/theme/AddonPaletteEditor.qml'] = (SOURCE/'payload/AddonPaletteEditor.qml').read_text()
+    theme_qmldir = QS/'guide/theme/qmldir'
+    theme_types = theme_qmldir.read_text()
+    if 'AddonPaletteEditor 1.0 AddonPaletteEditor.qml' not in theme_types:
+        theme_types = theme_types.rstrip() + '\nAddonPaletteEditor 1.0 AddonPaletteEditor.qml\n'
+    pending[theme_qmldir] = theme_types
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'

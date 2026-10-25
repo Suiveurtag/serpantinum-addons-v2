@@ -63,6 +63,31 @@ class ChangeTests(unittest.TestCase):
         self.assertIn('interval: 90', weather)
         self.assertEqual(weather, installer.patch_weather_face(weather))
 
+    def test_palette_overrides_sample_chosen_point(self):
+        from PIL import Image
+        colors = load('colors', ROOT/'scripts/colors.py')
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory)/'wall.png'
+            wall = Image.new('RGB', (200, 100), (20, 60, 220))
+            wall.paste((230, 20, 20), (100, 0, 200, 100))
+            wall.save(image)
+            auto, points = colors.palette(image, 'vibrant')
+            self.assertEqual(auto['blue'], '#143cdc')
+            self.assertFalse(points['blue']['manual'])
+            moved, points = colors.palette(image, 'vibrant', {'blue': [0.9, 0.5]})
+            self.assertEqual(moved['blue'], '#e61414')
+            self.assertEqual((points['blue']['x'], points['blue']['manual']), (0.9, True))
+            state = Path(directory)
+            (state/colors.OVERRIDES).write_text(json.dumps({str(image): {'blue': [0.9, 0.5], 'bogus': [0, 0]}, 'other': {}}))
+            self.assertEqual(colors.read_overrides(state, str(image)), {'blue': [0.9, 0.5]})
+            (state/colors.OVERRIDES).write_text('{broken')
+            self.assertEqual(colors.read_overrides(state, str(image)), {})
+
+    def test_palette_editor_hook_is_idempotent(self):
+        text = installer.patch_theme_view((installer.QS/'guide/theme/ThemeTab.qml').read_text())
+        self.assertEqual(text, installer.patch_theme_view(text))
+        self.assertEqual(text.count('AddonPaletteEditor { tab: themeTabRoot }'), 1)
+
     def test_theme_uses_original_tile_delegate(self):
         theme = installer.QS/'guide/theme/ThemeTabState.qml'
         text = (theme if theme.exists() else installer.QS/'guide/theme/ThemeTab.qml').read_text()
