@@ -156,7 +156,9 @@ SettingsBlob {
         Item {
             id: stage
             Layout.fillWidth: true
-            Layout.preferredHeight: rootObj.s(230)
+            // Follow the wallpaper's ratio so it fills the width; the cap keeps tall images reachable.
+            Layout.preferredHeight: Math.min(rootObj.s(620), Math.max(rootObj.s(230), (width - rootObj.s(20)) / sampler.ratio + rootObj.s(20)))
+            Behavior on Layout.preferredHeight { NumberAnimation { duration: 380; easing.type: Easing.OutCubic } }
             Layout.leftMargin: rootObj.s(12)
             Layout.rightMargin: rootObj.s(12)
 
