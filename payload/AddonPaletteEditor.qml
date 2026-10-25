@@ -125,6 +125,9 @@ SettingsBlob {
 
         SettingsRow {
             rootObj: editor.rootObj
+            // The whole header toggles the stage, not only the chevron.
+            clickable: true
+            onClicked: editor.expanded = !editor.expanded
             settingId: "addons_palette_editor"
             icon: "󰈊"
             title: "Wallpaper accents"
@@ -438,13 +441,15 @@ SettingsBlob {
                                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
                             }
 
-                            // Loupe: a larger swatch lifting above the point while dragging.
+                            // Loupe: a larger swatch lifting above the point while dragging,
+                            // dropping below it when the stage's top edge would clip it.
                             Item {
+                                readonly property bool below: dot.y < height + rootObj.s(10)
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.bottom: parent.top
-                                anchors.bottomMargin: rootObj.s(10)
+                                y: below ? dot.height + rootObj.s(10) : -height - rootObj.s(10)
+                                Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                                 width: rootObj.s(64); height: rootObj.s(64) + loupeLabel.height
-                                transformOrigin: Item.Bottom
+                                transformOrigin: below ? Item.Top : Item.Bottom
                                 property real shownAmount: dot.dragging ? 1 : 0
                                 Behavior on shownAmount { NumberAnimation { duration: dot.dragging ? 320 : 180; easing.type: dot.dragging ? Easing.OutBack : Easing.InCubic } }
                                 scale: 0.4 + 0.6 * shownAmount
