@@ -5,6 +5,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 PanelWindow {
     id: root
@@ -44,7 +45,10 @@ PanelWindow {
     property real editVal: 0
     property real editProgress: editing ? 1 : 0
     property real swatchRipple: 1
-    property var targetScreen: Quickshell.cursorScreen ?? (Quickshell.screens.length ? Quickshell.screens[0] : null)
+    function cursorScreen() {
+        return Quickshell.cursorScreen ?? Quickshell.screens.find(screen => Hyprland.focusedMonitor && screen.name === Hyprland.focusedMonitor.name) ?? Quickshell.screens[0] ?? null;
+    }
+    property var targetScreen: cursorScreen()
     screen: targetScreen
 
     Behavior on expansion { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
@@ -94,7 +98,7 @@ PanelWindow {
 
     function open() {
         if (active || opening || capture.running) return;
-        targetScreen = Quickshell.cursorScreen ?? (Quickshell.screens.length ? Quickshell.screens[0] : null);
+        targetScreen = cursorScreen();
         selected = false;
         selectionPending = false;
         editing = false;
