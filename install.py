@@ -8,6 +8,7 @@ import shlex
 import shutil
 import stat
 import tempfile
+import capri
 import seasonal
 import seasonal_surfaces
 import wallpaper_engine
@@ -911,7 +912,7 @@ def patch_inline_settings_keybind(text):
     return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 inline settings\n'
 
 
-def install(without_halloween=False):
+def install(without_halloween=False, without_capri=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     theme_state = QS/'guide/theme/ThemeTabState.qml'
     theme_view = QS/'guide/theme/ThemeTab.qml'
@@ -931,6 +932,10 @@ def install(without_halloween=False):
     for path, transform in seasonal.transformations(QS).items():
         text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)
+    for path, transform in capri.transformations(QS).items():
+        text = pending[path] if path in pending else path.read_text()
+        pending[path] = capri.remove(text) if without_capri else transform(text)
+    pending[keybind_path] = capri.remove(pending[keybind_path]) if without_capri else capri.patch_keybind(pending[keybind_path], QS/'Shell.qml')
     payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonsMouseTab.qml': 'guide/AddonsMouseTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for component in ('AddonCursorSettings', 'AddonCursorPreview', 'AddonCursorRole', 'AddonCursorTestArea'):
         payloads[component + '.qml'] = 'guide/' + component + '.qml'
@@ -962,6 +967,8 @@ def install(without_halloween=False):
     pending[QS/'calendar/LegacyCalendar.qml'] = clock_transform(pending[QS/'calendar/LegacyCalendar.qml'])
     if without_halloween:
         pending[QS/'guide/AddonsTab.qml'] = seasonal.remove(pending[QS/'guide/AddonsTab.qml'])
+    if without_capri:
+        pending[QS/'guide/AddonsTab.qml'] = capri.remove(pending[QS/'guide/AddonsTab.qml'])
     # Both tabs use the same DNS component; identical payload with appropriate relative imports.
     pending[QS/'guide/DnsControl.qml'] = (SOURCE/'payload/DnsControl.qml').read_text()
     qmldir = QS/'qmldir'
@@ -996,6 +1003,8 @@ def install(without_halloween=False):
             elif source.name == 'FogLayer.qml':
                 blob = blob.replace(b'shaders/atmosphere.frag.qsb', ('shaders/' + shader_name).encode())
         resource_payloads.append((path, blob))
+    capri_resources = [(QS/'capri'/source.relative_to(SOURCE/'payload/capri'), source.read_bytes())
+                       for source in sorted((SOURCE/'payload/capri').rglob('*')) if source.is_file()]
     bridge = HOME/'.local/lib/qt6/qml/Serpantinum/Wallpaper/libSerpantinumWallpaperplugin.so'
     if bridge.is_file():
         wallpaper_engine.prepare(pending, QS, DEPLOY, HOME/'.local')
@@ -1018,8 +1027,8 @@ def install(without_halloween=False):
         with os.fdopen(fd, 'w') as f: f.write(text)
         os.replace(name, path); changed += 1
     # Binary shader packages are versioned beside readable GLSL sources.
-    for path, blob in resource_payloads:
-        if without_halloween:
+    for path, blob, remove in [(p, b, without_halloween) for p, b in resource_payloads] + [(p, b, without_capri) for p, b in capri_resources]:
+        if remove:
             if path.exists():
                 saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, saved); path.unlink(); changed += 1
@@ -1051,4 +1060,6 @@ def install(without_halloween=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--without-halloween', action='store_true', help='Remove the seasonal layer while retaining other v2 addons')
-    install(without_halloween=parser.parse_args().without_halloween)
+    parser.add_argument('--without-capri', action='store_true', help='Remove the Capri desktop pet while retaining other v2 addons')
+    args = parser.parse_args()
+    install(without_halloween=args.without_halloween, without_capri=args.without_capri)

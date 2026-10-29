@@ -25,6 +25,9 @@ Item {
             // BEGIN serpantinum-night-v2 option
             HalloweenCard { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-night-v2 option
+            // BEGIN serpantinum-capri-v2 option
+            CapriSettings { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
+            // END serpantinum-capri-v2 option
             SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_weather_city_obfuscation"; searchTab: "addons"; searchKeywords: "weather city location privacy obfuscated météo ville localisation"
                 title: "Obfuscate weather location"; description: "Scramble the city name in the weather widget."; icon: "󰖟"
