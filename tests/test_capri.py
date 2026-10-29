@@ -59,6 +59,16 @@ class CapriPatchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             capri.patch_keybind('hl.bind("SUPER + SHIFT + K", hl.dsp.exec_cmd("custom"))\n', shell_qml)
 
+    def test_sprite_shader_package_matches_its_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)/'shaders'
+            shutil.copytree(ROOT/'payload/capri/shaders', folder)
+            self.assertRegex(installer.shader_package_name(folder, 'sprite'), r'^sprite\.[a-f0-9]{12}\.frag\.qsb$')
+            self.assertIn(b'shaders/sprite.frag.qsb', (ROOT/'payload/capri/CapriPet.qml').read_bytes())  # rewritten to it on install
+            (folder/'sprite.frag').write_text((folder/'sprite.frag').read_text() + '\n// unrecompiled modification\n')
+            with self.assertRaisesRegex(ValueError, 'source/package mismatch'):
+                installer.shader_package_name(folder, 'sprite')
+
     def test_settings_option_is_owned_by_capri_only(self):
         tab = (ROOT/'payload/AddonsTab.qml').read_text()
         self.assertIn('CapriSettings', tab)
@@ -138,13 +148,23 @@ class CapriSidecarTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which('quickshell') and shutil.which('node'), 'Quickshell runtime unavailable')
 class CapriRuntimeTests(unittest.TestCase):
     def test_master_switch_loads_and_unloads_everything(self):
+        self.run_fixture('capri_lifecycle.qml', 25)
+
+    def test_body_moves_end_to_end(self):
+        output = self.run_fixture('capri_body.qml', 60)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled')
+
+    def run_fixture(self, scenario, timeout):
         with tempfile.TemporaryDirectory(prefix='serpantinum-capri-test-') as directory:
             fixture = Path(directory)
             shutil.copytree(ROOT/'payload/capri', fixture/'capri')
             shutil.copytree(SCRIPTS, fixture/'data/serpantinum-addons-v2/scripts/capri')
-            # No PanelWindow backend offscreen: keep the pet, drop the layer surface (checked live instead).
-            (fixture/'capri/CapriOverlay.qml').write_text('import QtQuick\nimport "../"\nItem { property var screen; CapriPet {} }\n')
-            (fixture/'Shell.qml').write_text((ROOT/'tests/qml/capri_lifecycle.qml').read_text())
+            # No layer-shell offscreen: her engine in a plain window instead (the layer surface is checked live).
+            (fixture/'capri/CapriOverlay.qml').write_text('import QtQuick\nimport Quickshell\nimport "../"\nFloatingWindow {\n    property var screen\n'
+                                                          '    readonly property var engine: here\n    implicitWidth: 1280; implicitHeight: 720\n    color: "transparent"\n'
+                                                          '    Component.onCompleted: Capri.mounted()\n    Component.onDestruction: Capri.unmounted()\n'
+                                                          '    CapriEngine { id: here; anchors.fill: parent }\n}\n')
+            (fixture/'Shell.qml').write_text((ROOT/'tests/qml'/scenario).read_text())
             (fixture/'qmldir').write_text(capri.patch_qmldir('singleton Config 1.0 Config.qml\nsingleton Scaler 1.0 Scaler.qml\n'))
             (fixture/'Config.qml').write_text('''pragma Singleton
 import QtQuick
@@ -165,11 +185,12 @@ QtObject {
             env.pop('WAYLAND_DISPLAY', None)
             env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', XDG_RUNTIME_DIR=str(runtime), QML_DISABLE_DISK_CACHE='1',
                        XDG_DATA_HOME=str(fixture/'data'), CAPRI_PORT=str(port))
-            result = subprocess.run(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, capture_output=True, text=True, timeout=25)
+            result = subprocess.run(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, capture_output=True, text=True, timeout=timeout)
             output = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, output)
             self.assertIn('CAPRI_PASS', output)
             self.assertNotIn('CAPRI_FAIL', output)
+            return output
 
 
 if __name__ == '__main__':

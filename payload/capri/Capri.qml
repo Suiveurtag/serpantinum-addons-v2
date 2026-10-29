@@ -14,7 +14,16 @@ QtObject {
     property int instances: 0
     property int events: 0
     property var lastEvent: null
+    property string reply: ""
     signal hookEvent(var evt)
+    signal command(string name, string arg)
+
+    // An act or a move for her (IPC "act"), answered by the CapriEngine on her screen.
+    function act(name, arg) {
+        reply = "not on screen";
+        command(name, arg);
+        return reply;
+    }
 
     function mounted() { instances++; }
     function unmounted() { instances = Math.max(0, instances - 1); }

@@ -23,15 +23,15 @@ DEPLOY = DATA / 'serpantinum-addons-v2'
 MARK = 'serpantinum-addons-v2'
 
 
-def shader_package_name(folder):
-    source = folder/'atmosphere.frag'
-    package = folder/'atmosphere.frag.qsb'
+def shader_package_name(folder, stem='atmosphere'):
+    source = folder/(stem + '.frag')
+    package = folder/(stem + '.frag.qsb')
     manifest = json.loads((folder/'manifest.json').read_text())
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     package_hash = hashlib.sha256(package.read_bytes()).hexdigest()
     if manifest.get('source_sha256') != source_hash or manifest.get('package_sha256') != package_hash:
-        raise ValueError('Seasonal shader source/package mismatch; run python3 scripts/build-seasonal-shaders.py')
-    return 'atmosphere.' + package_hash[:12] + '.frag.qsb'
+        raise ValueError(f'Shader {stem} source/package mismatch; run python3 scripts/build-seasonal-shaders.py')
+    return stem + '.' + package_hash[:12] + '.frag.qsb'
 
 
 def patch_guide(text):
@@ -1003,8 +1003,16 @@ def install(without_halloween=False, without_capri=False):
             elif source.name == 'FogLayer.qml':
                 blob = blob.replace(b'shaders/atmosphere.frag.qsb', ('shaders/' + shader_name).encode())
         resource_payloads.append((path, blob))
-    capri_resources = [(QS/'capri'/source.relative_to(SOURCE/'payload/capri'), source.read_bytes())
-                       for source in sorted((SOURCE/'payload/capri').rglob('*')) if source.is_file()]
+    sprite = SOURCE/'payload/capri/shaders/sprite.frag.qsb'
+    sprite_name = None if without_capri else shader_package_name(sprite.parent, 'sprite')
+    capri_resources = []
+    for source in sorted((SOURCE/'payload/capri').rglob('*')):
+        if not source.is_file(): continue
+        path, blob = QS/'capri'/source.relative_to(SOURCE/'payload/capri'), source.read_bytes()
+        if sprite_name:
+            if source == sprite: path = path.with_name(sprite_name)
+            elif source.name == 'CapriPet.qml': blob = blob.replace(b'shaders/sprite.frag.qsb', ('shaders/' + sprite_name).encode())
+        capri_resources.append((path, blob))
     bridge = HOME/'.local/lib/qt6/qml/Serpantinum/Wallpaper/libSerpantinumWallpaperplugin.so'
     if bridge.is_file():
         wallpaper_engine.prepare(pending, QS, DEPLOY, HOME/'.local')
@@ -1045,12 +1053,12 @@ def install(without_halloween=False, without_capri=False):
         os.replace(name, path); changed += 1
     # Qt caches GPU programs by URL across hot reloads. Keep only the package
     # matching this source, retaining dated backups of superseded packages.
-    shader_dir = QS/'seasonal/shaders'
-    if shader_dir.exists():
-        import re
+    import re
+    for shader_dir, stem, keep in ((QS/'seasonal/shaders', 'atmosphere', shader_name), (QS/'capri/shaders', 'sprite', sprite_name)):
+        if not shader_dir.exists(): continue
         for path in shader_dir.iterdir():
-            owned = path.name == 'atmosphere.frag.qsb' or re.fullmatch(r'atmosphere\.[a-f0-9]{12}\.frag\.qsb', path.name)
-            if owned and (without_halloween or path.name != shader_name):
+            owned = path.name == stem + '.frag.qsb' or re.fullmatch(stem + r'\.[a-f0-9]{12}\.frag\.qsb', path.name)
+            if owned and path.name != keep:
                 saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, saved); path.unlink(); changed += 1
     shutil.copytree(SOURCE/'scripts', DEPLOY/'scripts', dirs_exist_ok=True)

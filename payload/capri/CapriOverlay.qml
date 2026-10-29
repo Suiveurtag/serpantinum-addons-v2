@@ -3,10 +3,11 @@ import Quickshell
 import Quickshell.Wayland
 import "../"
 
-// Full-screen transparent surface; input reaches only the pet, the rest of the desktop stays clickable.
+// Full-screen transparent surface; input reaches only her (and her mask or biochip), the rest of the desktop stays clickable.
 PanelWindow {
     id: overlay
     readonly property bool petHere: Capri.screenName ? Capri.screenName === screen.name : screen === Quickshell.screens[0]
+    readonly property var engine: here.item
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
     exclusionMode: ExclusionMode.Ignore
@@ -14,12 +15,19 @@ PanelWindow {
     WlrLayershell.namespace: "qs-addon-capri"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    mask: Region { item: overlay.petHere ? pet : null }
+    mask: Region {
+        Region { item: overlay.engine && overlay.engine.hitbox.visible ? overlay.engine.hitbox : null }
+        Region { item: overlay.engine && overlay.engine.maskBox.visible ? overlay.engine.maskBox : null }
+        Region { item: overlay.engine && overlay.engine.chipBox.visible ? overlay.engine.chipBox : null }
+    }
 
-    CapriPet {
-        id: pet
-        visible: overlay.petHere
-        x: overlay.width - width - Scaler.s(80)
-        y: overlay.height - height - Scaler.s(80)
+    Component.onCompleted: Capri.mounted()
+    Component.onDestruction: Capri.unmounted()
+
+    Loader {
+        id: here
+        anchors.fill: parent
+        active: overlay.petHere
+        sourceComponent: CapriEngine {}
     }
 }

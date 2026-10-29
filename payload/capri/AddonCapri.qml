@@ -17,6 +17,7 @@ Scope {
             try { evt = JSON.parse(json); } catch (error) {}
             return Capri.enabled && Capri.accept(evt) ? "ok" : "rejected";
         }
+        function act(name: string, arg: string): string { return Capri.enabled ? Capri.act(name, arg) : "off"; }
         function status(): string {
             return JSON.stringify({ enabled: Capri.enabled, animationEnabled: Capri.animationEnabled, instances: Capri.instances,
                 sidecar: root.sidecarRunning, events: Capri.events, lastEvent: Capri.lastEvent ? Capri.lastEvent.hook_event_name : null });
