@@ -14,6 +14,7 @@ Item {
     readonly property alias hitbox: hitbox
     readonly property alias maskBox: maskCanvas
     readonly property alias chipBox: chipCanvas
+    readonly property alias brain: brain
     readonly property var cutins: ["grin", "laugh", "eyes", "many", "look"]
     readonly property var cels: ["grab", "mouth1", "mouth2", "mouth3", "wave1", "wave2", "wave3", "smear", "happy"]
     readonly property var images: cutins.map(k => asset("cutin-" + k + ".png"))
@@ -49,6 +50,8 @@ Item {
         case "wanderStep": case "flourish": case "shed": case "twitch": case "spark": case "materialize": case "goHome": case "goToWork": case "unpeek": case "drop": case "drain": case "recharge":
             capri[name](name === "materialize" ? capri.spot("post") : undefined); return "ok";
         }
+        const answer = brain.command(name, arg);
+        if (answer !== "unknown") return answer;
         if (!Acting.ACTS[name]) return "unknown";
         capri.perform(name, capri.towardCenter());
         return "ok";
@@ -124,6 +127,8 @@ Item {
         onTriggered: Util.pump()
     }
 
+    CapriBrain { id: brain; engine: engine }
+
     CapriPet {
         id: pet
         dpr: Screen.devicePixelRatio
@@ -164,7 +169,8 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onPositionChanged: mouse => { if (engine.chip) engine.chip.pointer = { x: chipCanvas.x + mouse.x, y: chipCanvas.y + mouse.y }; }
             onExited: if (engine.chip) engine.chip.pointer = null
-            onClicked: if (engine.capri) engine.capri.unstow()
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => { if (mouse.button === Qt.RightButton) brain.openMenu(); else if (engine.capri) engine.capri.unstow(); }
         }
     }
 

@@ -31,6 +31,7 @@ ShellRoot {
             switch (step++) {
             case 0:
                 shell.setup();
+                body.onThrown = null; body.onGaze = null; // dialogue has its own Brain fixture
                 w.pc = null; w.ingest({ t: "pc", game: "Startup game" });
                 shell.expect(w.game === "Startup game", "foreground game survives engine initialization");
                 w.attach(); w.game = "";

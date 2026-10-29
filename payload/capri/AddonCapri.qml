@@ -43,6 +43,7 @@ Scope {
                 stdinEnabled: true
                 stdout: SplitParser { onRead: line => {
                     Capri.ingest(line);
+                    try { body.brain.ingest(JSON.parse(line)); } catch (error) { console.warn("Capri Brain:", error); }
                     try { environment.ingest(JSON.parse(line)); } catch (error) {}
                 } }
                 onRunningChanged: if (running) { environment.sentForeground = ""; environment.sendForeground(); }
@@ -58,6 +59,7 @@ Scope {
             CapriEngine {
                 id: body
                 world: environment
+                Connections { target: body.brain; function onSend(message) { if(sidecar.running)sidecar.write(JSON.stringify(message) + "\n"); } }
                 parent: environment.surface ? environment.surface.contentItem : null
                 width: environment.here ? environment.here.w : 0
                 height: environment.here ? environment.here.h : 0

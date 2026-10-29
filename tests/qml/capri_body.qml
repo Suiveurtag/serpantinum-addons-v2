@@ -5,7 +5,7 @@ import Quickshell
 // the expected state, and nothing in js/ may throw (checked by the test on the log).
 ShellRoot {
     id: shell
-    AddonCapri {}
+    AddonCapri { id: addon }
     Component.onCompleted: Config.setSetting("addonsV2Capri", true)
 
     function state() { return JSON.parse(Capri.act("state", "")); }
@@ -34,8 +34,15 @@ ShellRoot {
 
     Timer {
         property int i: 0
+        property bool isolated: false
         interval: 50; running: true
         onTriggered: {
+            // Dialogue is covered in capri_brain.qml; keep this fixture on the body and its own FX.
+            if (!isolated && addon.world && addon.world.engine.capri) {
+                const c = addon.world.engine.capri;
+                c.onGaze = null; c.onThrown = null; c.wander = false; c.possessWindows = false;
+                c.nextMove = Infinity; c.nextGaze = Infinity; c.nextTwitch = Infinity; c.nextShed = Infinity; isolated = true;
+            }
             if (i > 0) {
                 const step = shell.steps[i - 1];
                 const answer = Capri.act(step[1], step[2]);

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -80,6 +81,11 @@ class CapriPatchTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('node'), 'node unavailable')
 class CapriSidecarTests(unittest.TestCase):
+    def test_brain_rules_and_five_languages(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/brain.mjs')], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_BRAIN_PASS', result.stdout)
+
     def hooks(self, env, action, target):
         result = subprocess.run(['node', str(SCRIPTS/'hooks.js'), action, target], env=env, capture_output=True, text=True, timeout=10)
         return json.loads(result.stdout)
@@ -179,6 +185,14 @@ class CapriRuntimeTests(unittest.TestCase):
         output = self.run_fixture('capri_world.qml', 60)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|is not defined|Binding loop')
 
+    def test_brain_hooks_panels_reminders_end_to_end(self):
+        output = self.run_fixture('capri_brain.qml', 45)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|is not defined|Binding loop|Error:')
+
+    def test_native_ui_layout(self):
+        output = self.run_fixture('capri_ui.qml', 30)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Binding loop|Cannot assign|Unable to assign')
+
     def test_body_moves_end_to_end(self):
         output = self.run_fixture('capri_body.qml', 60)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled')
@@ -204,19 +218,20 @@ FloatingWindow {
 }
 ''')
             (fixture/'Shell.qml').write_text((ROOT/'tests/qml'/scenario).read_text())
-            (fixture/'qmldir').write_text(capri.patch_qmldir('singleton Config 1.0 Config.qml\nsingleton Scaler 1.0 Scaler.qml\nsingleton SysData 1.0 SysData.qml\nsingleton SysNotif 1.0 SysNotif.qml\n'))
+            (fixture/'qmldir').write_text(capri.patch_qmldir('singleton Config 1.0 Config.qml\nsingleton Scaler 1.0 Scaler.qml\nsingleton SysData 1.0 SysData.qml\nsingleton SysNotif 1.0 SysNotif.qml\nsingleton I18n 1.0 I18n.qml\nsingleton ThemeBackend 1.0 ThemeBackend.qml\n'))
             (fixture/'Config.qml').write_text('''pragma Singleton
 import QtQuick
 QtObject {
-    property bool capri: false
-    property bool performance: false
-    function getSetting(key, fallback) { return key === "addonsV2Capri" ? capri : (key === "general.performance" ? performance : fallback); }
-    function setSetting(key, value) { if (key === "addonsV2Capri") capri = value; else if (key === "general.performance") performance = value; }
+    property var rawSettings: ({})
+    function getSetting(key, fallback) { return rawSettings[key] === undefined ? fallback : rawSettings[key]; }
+    function setSetting(key, value) { const next = Object.assign({}, rawSettings); next[key] = value; rawSettings = next; }
 }
 ''')
             (fixture/'Scaler.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { function s(v) { return v; } }\n')
             (fixture/'SysData.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property int cpu: 0; property int subscribers: 0; function subscribe() { subscribers++; } function unsubscribe() { subscribers--; } }\n')
             (fixture/'SysNotif.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property bool hasBattery: false; property int batteryPercentage: 100; property bool isCharging: false }\n')
+            (fixture/'I18n.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string currentLang: \"en\" }\n')
+            (fixture/'ThemeBackend.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string fontFamily: \"DejaVu Sans Mono\"; property color base: \"#120c1c\" }\n')
             with socket.socket() as probe:
                 probe.bind(('127.0.0.1', 0))
                 port = probe.getsockname()[1]
@@ -227,9 +242,16 @@ QtObject {
             env.pop('HYPRLAND_INSTANCE_SIGNATURE', None)
             env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', XDG_RUNTIME_DIR=str(runtime), QML_DISABLE_DISK_CACHE='1',
                        XDG_DATA_HOME=str(fixture/'data'), CAPRI_PORT=str(port))
-            result = subprocess.run(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, capture_output=True, text=True, timeout=timeout)
-            output = result.stdout + result.stderr
-            self.assertEqual(result.returncode, 0, output)
+            process = subprocess.Popen(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # A failed fixture must not leave its native device watcher behind.
+                os.killpg(process.pid, signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail('Capri fixture timed out:\n' + stdout + stderr)
+            output = stdout + stderr
+            self.assertEqual(process.returncode, 0, output)
             self.assertIn('CAPRI_PASS', output)
             self.assertNotIn('CAPRI_FAIL', output)
             return output

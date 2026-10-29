@@ -23,7 +23,7 @@ export function pump() {
   const now = performance.now();
   const due = timers.filter((t) => t.at <= now);
   if (due.length) timers = timers.filter((t) => t.at > now);
-  for (const t of due) t.fn();
+  for (const t of due) { if (t.interval) { t.at = now + t.interval; timers.push(t); } t.fn(); }
   const run = frames;
   frames = [];
   for (const fn of run) fn(now);
@@ -98,4 +98,20 @@ export function tween(target, to, ms, easing = ease.out) {
     };
     requestAnimationFrame(tick);
   });
+}
+
+// Intervals share the existing body clock and are destroyed with it.
+export function setInterval(fn, ms) { const t = setTimeout(fn, ms); t.interval = ms; return t; }
+export const clearInterval = clearTimeout;
+export const fmt = (str, vars = {}) => String(str).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+export const basename = (p = '') => String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+export function duration(ms, lang = 'en') {
+  const s = Math.max(0, Math.round(ms / 1000)), m = Math.floor(s / 60), ss = String(s % 60).padStart(2, '0');
+  if (s < 60) return `${s} ${lang === 'ru' ? 'с' : 's'}`;
+  if (m < 60) return lang === 'en' ? `${m}m ${ss}s` : lang === 'ru' ? `${m} мин ${ss} с` : `${m} min ${ss}`;
+  return `${Math.floor(m / 60)} ${lang === 'ru' ? 'ч' : 'h'} ${String(m % 60).padStart(2, '0')}`;
+}
+export function pluralCategory(n, lang) {
+  if (lang === 'ru') return n % 10 === 1 && n % 100 !== 11 ? 'one' : n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14) ? 'few' : 'many';
+  return n === 1 || ((lang === 'fr' || lang === 'pt') && n === 0) ? 'one' : 'other';
 }

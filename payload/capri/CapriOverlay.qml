@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import "../"
 
@@ -12,16 +13,19 @@ PanelWindow {
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
     exclusionMode: ExclusionMode.Ignore
-    focusable: false
+    focusable: !!engine && engine.brain.wantsFocus
     WlrLayershell.namespace: "qs-addon-capri"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: focusable ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
         Region { item: overlay.engine && overlay.engine.hitbox.visible ? overlay.engine.hitbox : null }
         Region { item: overlay.engine && overlay.engine.maskBox.visible ? overlay.engine.maskBox : null }
         Region { item: overlay.engine && overlay.engine.chipBox.visible ? overlay.engine.chipBox : null }
+        Region { item: overlay.engine && overlay.engine.brain.bubble.visible ? overlay.engine.brain.bubble : null }
+        Region { item: overlay.engine && overlay.engine.brain.menu.visible ? overlay.engine.brain.menu : null }
     }
 
+    HyprlandFocusGrab { windows: [overlay]; active: overlay.focusable; onCleared: if(overlay.engine) overlay.engine.brain.dismiss() }
     Component.onCompleted: { Capri.mounted(); world.registerSurface(screen.name, overlay); }
     Component.onDestruction: { world.unregisterSurface(screen.name); Capri.unmounted(); }
 }

@@ -10,6 +10,8 @@ const readline = require('node:readline');
 const { createBridge } = require('./lib/bridge');
 const { steamGame } = require('./world');
 
+const parser = import('./reminder-parser.mjs');
+
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
 
 function emit(message) {
@@ -28,6 +30,9 @@ input.on('line', (line) => {
   let message;
   try { message = JSON.parse(line); } catch { return; }
   if (message?.t === 'foreground') emit({ t: 'pc', game: steamGame(message) });
+  if (message?.t === 'reminder.parse' && typeof message.text === 'string' && message.text.length <= 2000) {
+    parser.then(p => { const now = Date.now(), when = p.parseWhen(message.text, now)?.at; emit({t:'reminder.parsed', id:message.id, reminder:p.parseReminder(message.text, now), when:when - now >= 5000 && when - now <= 604800000 ? when : null}); });
+  }
   if (message?.t === 'ping') emit({ t: 'pong', id: message.id });
 });
 // The shell closes stdin when Capri turns off or the shell exits: never outlive it.
