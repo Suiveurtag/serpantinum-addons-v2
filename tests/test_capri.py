@@ -81,6 +81,16 @@ class CapriPatchTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('node'), 'node unavailable')
 class CapriSidecarTests(unittest.TestCase):
+    def test_chat_providers_intents_actions_and_codex_isolation(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/chat.cjs')], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_CHAT_PASS', result.stdout)
+
+    def test_chat_confirmations_and_queued_work(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/chat-ui.mjs')], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_CHAT_UI_PASS', result.stdout)
+
     def test_brain_rules_and_five_languages(self):
         result = subprocess.run(['node', str(ROOT/'tests/capri/brain.mjs')], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -189,6 +199,10 @@ class CapriRuntimeTests(unittest.TestCase):
         output = self.run_fixture('capri_brain.qml', 45)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|is not defined|Binding loop|Error:')
 
+    def test_chat_native_round_trip(self):
+        output = self.run_fixture('capri_chat.qml', 45)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|Binding loop|Cannot assign|Unable to assign|Error:')
+
     def test_native_ui_layout(self):
         output = self.run_fixture('capri_ui.qml', 30)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Binding loop|Cannot assign|Unable to assign')
@@ -241,7 +255,7 @@ QtObject {
             env.pop('WAYLAND_DISPLAY', None)
             env.pop('HYPRLAND_INSTANCE_SIGNATURE', None)
             env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', XDG_RUNTIME_DIR=str(runtime), QML_DISABLE_DISK_CACHE='1',
-                       XDG_DATA_HOME=str(fixture/'data'), CAPRI_PORT=str(port))
+                       XDG_DATA_HOME=str(fixture/'data'), XDG_STATE_HOME=str(fixture/'state'), CAPRI_TEST_SERVER=str(ROOT/'tests/capri/chat-server.cjs'), CAPRI_PORT=str(port))
             process = subprocess.Popen(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
             try:
                 stdout, stderr = process.communicate(timeout=timeout)

@@ -113,6 +113,10 @@ FocusScope {
                     label: t.demo,
                     act: "demo"
                 },
+                {label:t.talk,act:"chat"},
+                {label:t.chatModel,act:"ai"},
+                {label:t.custom,custom:true},
+                {label:t.forget,forget:true},
                 {
                     label: t.report,
                     act: "report",
@@ -171,7 +175,10 @@ FocusScope {
             if (row.watch !== "none")
                 Config.setSetting("addonsV2CapriAssistant", row.watch);
             Config.setSetting("addonsV2CapriWatching", row.watch !== "none");
-        } else if (row.screen)
+        } else if(row.custom) {
+            brain.chatController.showSettings();brain.chatSettings.personal=true;
+        } else if(row.forget) brain.chatController.forget();
+        else if (row.screen)
             engine.world.goToScreen(row.screen, true);
         else if (row.cancel) {
             brain.runtime.reminders.remove(row.cancel);

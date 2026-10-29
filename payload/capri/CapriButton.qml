@@ -20,7 +20,7 @@ Button {
         elide: Text.ElideRight
     }
     background: Rectangle {
-        color: control.down ? "#7d3af5" : control.hovered ? "#7d3af5" : control.primary ? control.accent : "#20182f"
+        color: !control.enabled ? "#20182f" : control.down ? "#7d3af5" : control.hovered ? "#7d3af5" : control.primary ? control.accent : "#20182f"
         border.width: control.activeFocus ? 2 : 0
         border.color: "#fcf2f6"
     }

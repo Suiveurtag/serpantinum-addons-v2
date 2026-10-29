@@ -9,7 +9,7 @@ export class Panel {
     if (this.visible && cur) {
       if (cur.kind!==msg.kind && PRIORITY[cur.kind]>p && performance.now()-cur.at<2600) return false;
       if ((cur.reply && p<2) || (cur.report && p<3)) return false;
-      if (cur.chat && !cur.guide && p<4) { if(p>=3) this.missed=msg; return false; }
+      if (cur.chat && !cur.guide && p<4) { if(p>=3) this.missed=Object.assign({},msg,{missedAt:performance.now()}); return false; }
     }
     this.leave();
     this.current=Object.assign({},msg,{at:performance.now()}); this.visible=true;
@@ -19,7 +19,10 @@ export class Panel {
     return true;
   }
   leave() { if(this.current && this.current.onLeave) this.current.onLeave(); }
-  hide() { if (!this.visible) return; this.visible=false; clearTimeout(this.timer); this.leave(); this.current=null; this.host.changed(this); }
+  hide() { if (!this.visible) return; this.visible=false; clearTimeout(this.timer); this.leave(); this.current=null; this.host.changed(this);
+    const missed=this.missed;this.missed=null;
+    if(missed && performance.now()-missed.missedAt<=120000)setTimeout(()=>{if(!this.visible)this.say(missed);},0);
+  }
   clearKind(kind) { if(this.current && this.current.kind===kind) this.hide(); }
   setTicker(action) {
     clearTimeout(this.tickerTimer);
@@ -27,7 +30,12 @@ export class Panel {
     this.tickerAt=performance.now(); this.tickerAction=action; this.host.changed(this);
   }
   updateLog(log) { if(this.current) { this.current.log=log.slice(-4); this.host.changed(this); } }
-  setActions(actions) { if(this.current) { this.current.actions=actions; this.host.changed(this); } }
+  setActions(actions, onAction) { if(this.current) { this.current.actions=actions; if(onAction)this.current.onAction=onAction; this.host.changed(this); } }
+  patch(values) { if(this.current) {Object.assign(this.current,values);this.host.changed(this);} }
+  setFace(face) {this.patch({face});}
+  setChatBusy(busy) {this.patch({chatBusy:busy});}
+  chatTurn(values) {this.patch(Object.assign({line:'',reply:'',actions:[],chatDone:false},values));}
+  stream(line, options={}) {this.patch({line,chatDone:!!options.done});}
   relabel(id,label) { if(this.current && this.current.actions) { this.current.actions=this.current.actions.map(a=>a.id===id?Object.assign({},a,{label}):a); this.host.changed(this); } }
   snapshot(fn) { return this.host.snapshot(fn); }
   action(id) { if(this.current && this.current.onAction) this.current.onAction(id); }

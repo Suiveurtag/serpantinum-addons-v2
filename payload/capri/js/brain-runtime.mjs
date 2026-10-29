@@ -1,4 +1,4 @@
-// Lot 4 wiring from upstream app.js: no AI/chat provider or setup flow here.
+// Brain wiring from upstream app.js; chat attaches in CapriChat.qml.
 import {Brain} from './brain.mjs';
 import {Bond, Jealousy, RIVALS} from './bond.mjs';
 import {Mission} from './mission.mjs';
@@ -54,7 +54,7 @@ export class Runtime {
       b.linked=h.get('Linked',false); this.jealousy.front=null;
     }
     b.assistant=assistant;b.watching=watching;b.lang=h.lang();
-    b.custom={userName:h.get('UserName',''),myLines:h.get('MyLines',[])};
+    b.custom={userName:h.get('UserName',''),persona:h.get('Persona',''),memories:h.get('Memories',[]),myLines:h.get('MyLines',[])};
     this.jealousy.enabled=h.get('Jealous',true);
     if(!this.jealousy.enabled){this.jealousy.front=null;this.jealousy.forgive();}
     this.reminders.sync(h.get('Reminders',[]));
@@ -102,6 +102,16 @@ export class Runtime {
       const line=missed?fmt(r.text?t.missed:t.missedBare,{text:r.text,time}):fmt(pick(r.text?t.now:t.nowBare),{text:r.text});
       let answered=false;
       const onAction=id=> {answered=true;if(id==='snooze'){rs.snooze(r.id,600000);p.hide();p.say({kind:'info',line:t.snoozed,hold:2500});}else {rs.remove(r.id);self.bond.add('remind',2);p.hide();p.say({kind:'info',line:pick(t.doneLine),hold:2500});}};
+      if(self.chat && self.chat.open) {
+        const until=performance.now()+30000;
+        while(self.chat.open && self.chat.turn && performance.now()<until)yield sleep(500);
+        if(self.chat.open && self.chat.turn){rs.snooze(r.id,60000);return;}
+        if(self.chat.open) {
+          const actions=[{id:'done',label:t.done,primary:true},{id:'snooze',label:t.snooze}];
+          const done=id=>{answered=true;if(id==='snooze'){rs.snooze(r.id,600000);self.chat.interject(t.snoozed,[],null);}else {rs.remove(r.id);self.bond.add('remind',2);self.chat.interject(pick(t.doneLine),[],null);}};
+          if(self.chat.interject(line,actions,done)) {p.current.onLeave=()=>{self.chat.close();if(!answered)rs.remove(r.id);};return;}
+        }
+      }
       if(c.stowed)yield c.unstow();c.wake();
       const until=performance.now()+8000;while((c.busy||c.dragging)&&performance.now()<until)yield sleep(100);
       if(c.busy || c.dragging || h.quiet() || c.mode==='alert'){rs.snooze(r.id,60000);return;}

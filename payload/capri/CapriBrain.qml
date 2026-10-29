@@ -11,6 +11,7 @@ Item {
     z: 100
     required property var engine
     anchors.fill: parent
+    readonly property alias chatController: chatController
     property var runtime: null
     property var pendingEvents: []
     property var message: null
@@ -35,7 +36,8 @@ Item {
     }
     readonly property alias bubble: bubble
     readonly property alias menu: menu
-    readonly property bool wantsFocus: menuOpen || reminderOpen || !!(message && message.actions && message.actions.length)
+    readonly property alias chatSettings: chatSettings
+    readonly property bool wantsFocus: chatController.settingsOpen || !!(message && message.chat) || menuOpen || reminderOpen || !!(message && message.actions && message.actions.length)
     property var copyResolve: null
     property bool demoRunning: false
     signal send(var message)
@@ -95,6 +97,7 @@ Item {
         };
         head = engine.capri.head();
         revision++;
+        chatController.start();
         windows();
         const queued = pendingEvents; pendingEvents = [];
         queued.forEach(evt => root.handle(evt));
@@ -111,8 +114,10 @@ Item {
             runtime.panel.hide();
         menuOpen = false;
         reminderOpen = false;
+        chatController.settingsOpen = false;
     }
     function ingest(msg) {
+        chatController.ingest(msg);
         if (runtime && msg.t === "reminder.parsed")
             runtime.parsed(msg);
     }
@@ -138,6 +143,10 @@ Item {
         if (!runtime)
             return "not ready";
         switch (name) {
+        case "chat": chatController.open(); return "ok";
+        case "send": chatController.submit(arg); return "ok";
+        case "ai": chatController.showSettings(); return "ok";
+        case "forget": chatController.forget(); return "ok";
         case "brain":
             return JSON.stringify({
                 lang,
@@ -164,6 +173,7 @@ Item {
                 bond: runtime.bond.data,
                 feeling: runtime.bond.feeling,
                 reminders: runtime.reminders.list,
+                chat: chatController.chat ? {open:chatController.chat.open,turn:chatController.chat.turn,history:chatController.chat.history.length,busy:!!(message && message.chatBusy)} : null,
                 menu: menuOpen
             });
         case "demo":
@@ -206,6 +216,7 @@ Item {
         runtime.panel.hide();
         menuOpen = false;
         reminderOpen = false;
+        chatController.settingsOpen = false;
     }
     onLangChanged: if (runtime) {
         runtime.configure();
@@ -271,6 +282,8 @@ Item {
             root.copyResolve = null;
         }
     }
+    CapriChat { id: chatController; brain: root; onSend: message => root.send(message) }
+    CapriChatSettings { id: chatSettings; brain: root; controller: chatController; engine: root.engine }
     CapriPanel {
         id: bubble
         brain: root

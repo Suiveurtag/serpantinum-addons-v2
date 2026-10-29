@@ -5,7 +5,7 @@ import shlex
 
 MARK = 'serpantinum-capri-v2'
 TYPES = ['singleton Capri 1.0 capri/Capri.qml'] + [f'{name} 1.0 capri/{name}.qml' for name in
-         ('AddonCapri', 'CapriOverlay', 'CapriWorld', 'CapriEngine', 'CapriPet', 'CapriSettings', 'CapriBrain', 'CapriPanel', 'CapriTicker', 'CapriMenu', 'CapriPlate', 'CapriButton')]
+         ('AddonCapri', 'CapriOverlay', 'CapriWorld', 'CapriEngine', 'CapriPet', 'CapriSettings', 'CapriBrain', 'CapriPanel', 'CapriTicker', 'CapriMenu', 'CapriPlate', 'CapriButton', 'CapriChat', 'CapriChatSettings')]
 CHORD = 'SUPER + SHIFT + K'
 
 

@@ -8,7 +8,7 @@ FocusScope {
     required property var engine
     readonly property var msg: brain.message || ({})
     readonly property var report: msg.report || null
-    readonly property color accent: msg.kind === "error" || msg.kind === "alert" ? "#ff245d" : msg.kind === "remind" ? "#2e79f5" : ["done", "work", "report"].indexOf(msg.kind) >= 0 ? "#36ff73" : msg.kind === "idle" ? "#9c8ca0" : "#7d3af5"
+    readonly property color accent: msg.kind === "error" || msg.kind === "alert" ? "#ff245d" : msg.kind === "remind" ? "#2e79f5" : ["done", "work", "report", "chat"].indexOf(msg.kind) >= 0 ? "#36ff73" : msg.kind === "idle" ? "#9c8ca0" : "#7d3af5"
     readonly property string face: msg.face || ({
             alert: "many",
             done: "look",
@@ -21,16 +21,17 @@ FocusScope {
     readonly property bool below: brain.head.top - height + 14 < 14
     readonly property bool reduced: !Capri.animationEnabled
     property string decoded: ""
+    property bool caretOn: true
     property int letters: 0
     property real messageAt: -1
     property real enteredAt: 0
     property real counter: 1
     property real faceShift: 0
-    width: Math.min(engine.width - 28, msg.reply ? Math.max(340, Math.min(520, engine.width * .3)) : report ? Math.max(340, Math.min(440, engine.width * .26)) : Math.max(290, Math.min(380, engine.width * .21)))
+    width: Math.min(engine.width - 28, msg.chat ? Math.max(320, Math.min(420,engine.width*.24)) : msg.reply ? Math.max(340, Math.min(520, engine.width * .3)) : report ? Math.max(340, Math.min(440, engine.width * .26)) : Math.max(290, Math.min(380, engine.width * .21)))
     height: Math.min(engine.height - 28, content.implicitHeight + 30)
     x: Math.max(14, Math.min(engine.width - width - 14, brain.head.x > engine.width / 2 ? brain.head.x - width + 46 : brain.head.x - 46))
     y: Math.max(14, Math.min(engine.height - height - 14, below ? brain.head.y + 40 : brain.head.top - height + 14))
-    visible: brain.message !== null && !brain.suspended && !brain.dnd
+    visible: brain.message !== null && !brain.suspended && !brain.dnd && !brain.chatController.hiddenForShot
     opacity: reduced ? 1 : enter.value
     property real tailX: Math.max(24, Math.min(width - 24, brain.head.x - x))
     FontLoader {
@@ -54,14 +55,16 @@ FocusScope {
         if (engine.capri && visible && !reduced)
             engine.capri.perform("talk");
     }
-    onMsgChanged: if (msg.at !== messageAt) {
-        messageAt = msg.at || 0;
-        refresh();
+    onMsgChanged: {
+        if(msg.at !== messageAt) {messageAt=msg.at||0;refresh();}
+        else if(msg.chat) {if(reduced)decoded=msg.line||"";else if(visible)decode.restart();}
     }
+    function focusChat() { if(visible && msg.chat) chatEntry.forceActiveFocus(); }
     Keys.onEscapePressed: brain.runtime.panel.hide()
     onVisibleChanged: if (visible) {
         refresh();
-        if (msg.actions && msg.actions.length) Qt.callLater(() => panel.forceActiveFocus());
+        if(msg.chat) Qt.callLater(panel.focusChat);
+        else if (msg.actions && msg.actions.length) Qt.callLater(() => panel.forceActiveFocus());
     } else {
         decode.stop(); counts.stop(); glitch.stop();
     }
@@ -109,7 +112,7 @@ FocusScope {
         repeat: true
         onTriggered: {
             const line = String(panel.msg.line || ""), noise = "▚▞▙▟░▒#%&/\\<>01XZ";
-            panel.letters = Math.min(line.length, panel.letters + 2);
+            panel.letters = Math.min(line.length, panel.letters + (panel.msg.chat ? Math.max(2,Math.ceil((line.length-panel.letters)/14)) : 2));
             let tail = "";
             for (let i = panel.letters; i < Math.min(line.length, panel.letters + 6); i++)
                 tail += line[i] === " " ? " " : noise[Math.floor(Math.random() * noise.length)];
@@ -117,6 +120,10 @@ FocusScope {
             if (panel.letters >= line.length)
                 stop();
         }
+    }
+    Timer {
+        interval:600;repeat:true;running:panel.visible && !!panel.msg.chatBusy && !panel.reduced
+        onTriggered:panel.caretOn=!panel.caretOn
     }
     Timer {
         id: counts
@@ -162,7 +169,7 @@ FocusScope {
     }
     MouseArea {
         anchors.fill: parent
-        onClicked: brain.runtime.panel.hide()
+        onClicked: {if(panel.msg.chat)panel.focusChat();else brain.runtime.panel.hide();}
         onWheel: wheel => wheel.accepted = true
     }
     Flickable {
@@ -244,7 +251,7 @@ FocusScope {
                     }
                     Text {
                         width: parent.width
-                        text: panel.decoded
+                        text: panel.decoded + (panel.msg.chatBusy && (panel.reduced || panel.caretOn) ? "▌" : "")
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
                         color: "#fcf2f6"
@@ -405,6 +412,28 @@ FocusScope {
                         font.pixelSize: 11
                         elide: Text.ElideRight
                     }
+                }
+            }
+            Column {
+                visible:!!panel.msg.chat;width:parent.width;spacing:8
+                TextField {
+                    id:chatEntry;width:parent.width;maximumLength:2000
+                    enabled:!panel.msg.chatBusy
+                    placeholderText:panel.msg.chat ? panel.msg.chat.placeholder : ""
+                    Accessible.name:placeholderText
+                    color:"#fcf2f6";placeholderTextColor:"#d6c5d0";selectByMouse:true
+                    font.family:ThemeBackend.fontFamily
+                    background:Rectangle {color:"#2a203b";border.color:chatEntry.activeFocus?"#36ff73":"#7d3af5"}
+                    onAccepted: {if(text.trim()){brain.chatController.submit(text);clear();}}
+                }
+                Flow {
+                    width:parent.width;spacing:8
+                    CapriButton {text:panel.msg.chat?panel.msg.chat.send:"";primary:true;enabled:!panel.msg.chatBusy && !!chatEntry.text.trim();onClicked:{brain.chatController.submit(chatEntry.text);chatEntry.clear();}}
+                    CapriButton {text:panel.msg.chat?panel.msg.chat.close:"";onClicked:brain.runtime.panel.hide()}
+                }
+                Text {
+                    width:parent.width;text:panel.msg.chat ? panel.msg.chat.noteTag+" · "+panel.msg.chat.note : ""
+                    color:"#b7a4bd";font.family:ThemeBackend.fontFamily;font.pixelSize:10;wrapMode:Text.Wrap
                 }
             }
             Flow {

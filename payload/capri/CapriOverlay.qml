@@ -18,6 +18,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: focusable ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
+        Region { item: overlay.engine && overlay.engine.brain.chatSettings.visible ? overlay.engine.brain.chatSettings : null }
         Region { item: overlay.engine && overlay.engine.hitbox.visible ? overlay.engine.hitbox : null }
         Region { item: overlay.engine && overlay.engine.maskBox.visible ? overlay.engine.maskBox : null }
         Region { item: overlay.engine && overlay.engine.chipBox.visible ? overlay.engine.chipBox : null }
