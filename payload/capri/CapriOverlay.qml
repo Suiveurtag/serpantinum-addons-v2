@@ -7,7 +7,8 @@ import "../"
 PanelWindow {
     id: overlay
     readonly property bool petHere: Capri.screenName ? Capri.screenName === screen.name : screen === Quickshell.screens[0]
-    readonly property var engine: here.item
+    required property var world
+    readonly property var engine: petHere ? world.engine : null
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
     exclusionMode: ExclusionMode.Ignore
@@ -21,13 +22,6 @@ PanelWindow {
         Region { item: overlay.engine && overlay.engine.chipBox.visible ? overlay.engine.chipBox : null }
     }
 
-    Component.onCompleted: Capri.mounted()
-    Component.onDestruction: Capri.unmounted()
-
-    Loader {
-        id: here
-        anchors.fill: parent
-        active: overlay.petHere
-        sourceComponent: CapriEngine {}
-    }
+    Component.onCompleted: { Capri.mounted(); world.registerSurface(screen.name, overlay); }
+    Component.onDestruction: { world.unregisterSurface(screen.name); Capri.unmounted(); }
 }

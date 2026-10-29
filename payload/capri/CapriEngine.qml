@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Window
 import "../"
 import "js/util.mjs" as Util
 import "js/acting.mjs" as Acting
@@ -8,7 +7,7 @@ import "js/chip.mjs" as Forms
 import "js/capri.mjs" as Body
 
 // Capri on one screen: her body, the full-screen fx layer, her mask and biochip, all driven by
-// js/capri.mjs (the upstream behaviour, ported). Lives only while she's on this screen.
+// js/capri.mjs (the upstream behaviour, ported). The same engine travels between screens.
 Item {
     id: engine
     // what takes the pointer (CapriOverlay's input region): her body, and her mask or biochip when shown
@@ -21,6 +20,7 @@ Item {
         .concat(cels.map(k => asset("intro-" + k + ".webp")))
         .concat(["paper", "ink", "violet"].map(k => asset("intro-flat-" + k + ".png")))
         .concat(["r", "g", "b"].map(k => asset("intro-channel-" + k + ".webp")))
+    property var world: null
     property var capri: null
     property var fx: null
     property var mask: null
@@ -32,6 +32,11 @@ Item {
     function act(name, arg) {
         if (!capri) return "not ready";
         switch (name) {
+        case "screen": return world && world.goToScreen(arg, true) ? "ok" : "unavailable";
+        case "world": return JSON.stringify({ screen: Capri.screenName, displays: world ? world.displays : [],
+            windows: capri.windows, cursor: world ? world.cursor : null, game: world ? world.game : "" });
+        case "sit": { const seat = capri.pickSeat(); if (!seat) return "no seat"; capri.sitOn(seat); return "ok"; }
+        case "possess": return capri.canPossess() ? (capri.possess({ say: arg || "" }), "ok") : "unavailable";
         case "teleport": capri.teleport(capri.spot(arg || "random")); return "ok";
         case "intro": capri.intro(capri.spot("post"), arg === "still" ? { still: true } : {}); return "ok";
         case "gaze": capri.gaze({ big: arg === "big" }); return "ok";
@@ -39,9 +44,9 @@ Item {
         case "throw": { const v = String(arg).split(","); capri.throwHer(+v[0] || 0, +v[1] || 0); return "ok"; }
         case "state": return JSON.stringify({ stance: capri.stance, mode: capri.mode, busy: capri.busy, hidden: capri.hidden,
             stowed: capri.stowed, dormant: capri.dormant, act: capri.act ? capri.act.player.name : null, fx: fx.items.length,
-            x: Math.round(capri.pos.x), y: Math.round(capri.pos.y) });
+            screen: Capri.screenName, perch: capri.perch, x: Math.round(capri.pos.x), y: Math.round(capri.pos.y) });
         case "celebrate": case "hurt": case "doze": case "rouse": case "stow": case "unstow": case "peek": case "fall":
-        case "wanderStep": case "flourish": case "shed": case "twitch": case "spark": case "materialize": case "goHome":
+        case "wanderStep": case "flourish": case "shed": case "twitch": case "spark": case "materialize": case "goHome": case "goToWork": case "unpeek": case "drop": case "drain": case "recharge":
             capri[name](name === "materialize" ? capri.spot("post") : undefined); return "ok";
         }
         if (!Acting.ACTS[name]) return "unknown";
@@ -53,8 +58,8 @@ Item {
         if (capri || !fxCanvas.available || !maskCanvas.available || !chipCanvas.available) return;
         for (const url of images) if (!fxCanvas.isImageLoaded(url)) return;
         Util.reducedMotion.matches = !Capri.animationEnabled;
-        Util.storage.getItem = key => Config.getSetting("addonsV2Capri." + key, null);
-        Util.storage.setItem = (key, value) => Config.setSetting("addonsV2Capri." + key, value);
+        Util.storage.getItem = key => Config.getSetting("addonsV2CapriState." + key, null);
+        Util.storage.setItem = (key, value) => Config.setSetting("addonsV2CapriState." + key, value);
         const intro = {};
         cels.forEach(k => intro[k] = asset("intro-" + k + ".webp"));
         const shots = {};
@@ -63,7 +68,6 @@ Item {
         fx.resize(width, height);
         mask = new Forms.Mask(maskCanvas);
         chip = new Forms.Chip(chipCanvas);
-        // shortcut: floor = bottom of the screen (the bar is on top here); lot 3 reads Hyprland's reserved area
         chip.place(width, height);
         capri = new Body.Capri({ fx, voice: { play() {} }, host: {
             width, height,
@@ -75,7 +79,7 @@ Item {
                 hitbox.x = t.box.x; hitbox.y = t.box.y; hitbox.width = t.box.w; hitbox.height = t.box.h;
             },
         } });
-        capri.setView(width, height, height);
+        setView(width, height, world && world.here ? world.here.floor : height);
         capri.setScale(Config.getSetting("addonsV2CapriScale", 0.6));
         capri.chipAt = () => chip.center();
         capri.onStow = () => { chip.setMode(capri.mode); chip.show(); Config.setSetting("addonsV2CapriStowed", true); };
@@ -87,7 +91,20 @@ Item {
             else mask.hide();
         };
         if (Config.getSetting("addonsV2CapriStowed", false)) capri.stowNow();
-        else capri.intro(capri.spot("post"));
+        else {
+            const saved = Config.getSetting("addonsV2CapriPosition", null);
+            const to = saved && saved.screen === Capri.screenName ? {
+                x: Util.clamp(saved.x, 60, width - 60), y: Util.clamp(saved.y, 440 * capri.scale, capri.floor)
+            } : capri.spot("post");
+            capri.intro(to);
+        }
+    }
+
+    function setView(w, h, floor) {
+        if (!capri || (capri.view.w === w && capri.view.h === h && capri.view.floor === floor)) return;
+        fx.resize(w, h);
+        chip.place(w, floor);
+        capri.setView(w, h, floor);
     }
 
     Component.onCompleted: images.forEach(url => fxCanvas.loadImage(url))

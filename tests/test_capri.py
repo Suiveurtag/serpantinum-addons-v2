@@ -128,6 +128,8 @@ class CapriSidecarTests(unittest.TestCase):
                 urllib.request.urlopen(request, timeout=2)
             self.assertEqual(refused.exception.code, 403)
             refused.exception.close()
+            sidecar.stdin.write(json.dumps({'t': 'foreground', 'pid': os.getpid(), 'class': 'steam_app_2357570', 'title': 'Overwatch'}) + '\n'); sidecar.stdin.flush()
+            self.assertEqual(json.loads(sidecar.stdout.readline()), {'t': 'pc', 'game': 'Overwatch'})
             sidecar.stdin.close()
             self.assertEqual(sidecar.wait(timeout=5), 0)
         finally:
@@ -135,6 +137,29 @@ class CapriSidecarTests(unittest.TestCase):
             sidecar.wait()
             sidecar.stdout.close()
             sidecar.stderr.close()
+
+    def test_sidecar_retries_port_after_reload_overlap(self):
+        with socket.socket() as occupied:
+            occupied.bind(('127.0.0.1', 0)); occupied.listen()
+            port = occupied.getsockname()[1]
+            sidecar = subprocess.Popen(['node', str(SCRIPTS/'sidecar.js')], env=dict(os.environ, CAPRI_PORT=str(port)),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertIn('already in use', sidecar.stderr.readline())
+                occupied.close()
+                self.assertIn('listening', sidecar.stderr.readline())
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=2) as reply:
+                    self.assertEqual(json.load(reply)['pid'], sidecar.pid)
+                sidecar.stdin.close()
+                self.assertEqual(sidecar.wait(timeout=5), 0)
+            finally:
+                sidecar.kill(); sidecar.wait()
+                sidecar.stdout.close(); sidecar.stderr.close()
+
+    def test_world_geometry_pc_thresholds_and_linux_events(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/world.mjs')], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_WORLD_PASS', result.stdout)
 
     def test_hook_is_silent_when_nothing_listens(self):
         with socket.socket() as probe:
@@ -150,6 +175,10 @@ class CapriRuntimeTests(unittest.TestCase):
     def test_master_switch_loads_and_unloads_everything(self):
         self.run_fixture('capri_lifecycle.qml', 25)
 
+    def test_world_moves_end_to_end(self):
+        output = self.run_fixture('capri_world.qml', 60)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|is not defined|Binding loop')
+
     def test_body_moves_end_to_end(self):
         output = self.run_fixture('capri_body.qml', 60)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled')
@@ -160,12 +189,22 @@ class CapriRuntimeTests(unittest.TestCase):
             shutil.copytree(ROOT/'payload/capri', fixture/'capri')
             shutil.copytree(SCRIPTS, fixture/'data/serpantinum-addons-v2/scripts/capri')
             # No layer-shell offscreen: her engine in a plain window instead (the layer surface is checked live).
-            (fixture/'capri/CapriOverlay.qml').write_text('import QtQuick\nimport Quickshell\nimport "../"\nFloatingWindow {\n    property var screen\n'
-                                                          '    readonly property var engine: here\n    implicitWidth: 1280; implicitHeight: 720\n    color: "transparent"\n'
-                                                          '    Component.onCompleted: Capri.mounted()\n    Component.onDestruction: Capri.unmounted()\n'
-                                                          '    CapriEngine { id: here; anchors.fill: parent }\n}\n')
+            (fixture/'capri/CapriOverlay.qml').write_text('''import QtQuick
+import Quickshell
+import "../"
+FloatingWindow {
+    id: surface
+    property var screen
+    required property var world
+    readonly property var engine: world.engine
+    implicitWidth: 1280; implicitHeight: 720
+    color: "transparent"
+    Component.onCompleted: { Capri.mounted(); world.registerSurface(screen.name, surface); }
+    Component.onDestruction: { world.unregisterSurface(screen.name); Capri.unmounted(); }
+}
+''')
             (fixture/'Shell.qml').write_text((ROOT/'tests/qml'/scenario).read_text())
-            (fixture/'qmldir').write_text(capri.patch_qmldir('singleton Config 1.0 Config.qml\nsingleton Scaler 1.0 Scaler.qml\n'))
+            (fixture/'qmldir').write_text(capri.patch_qmldir('singleton Config 1.0 Config.qml\nsingleton Scaler 1.0 Scaler.qml\nsingleton SysData 1.0 SysData.qml\nsingleton SysNotif 1.0 SysNotif.qml\n'))
             (fixture/'Config.qml').write_text('''pragma Singleton
 import QtQuick
 QtObject {
@@ -176,6 +215,8 @@ QtObject {
 }
 ''')
             (fixture/'Scaler.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { function s(v) { return v; } }\n')
+            (fixture/'SysData.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property int cpu: 0; property int subscribers: 0; function subscribe() { subscribers++; } function unsubscribe() { subscribers--; } }\n')
+            (fixture/'SysNotif.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property bool hasBattery: false; property int batteryPercentage: 100; property bool isCharging: false }\n')
             with socket.socket() as probe:
                 probe.bind(('127.0.0.1', 0))
                 port = probe.getsockname()[1]
@@ -183,6 +224,7 @@ QtObject {
             runtime.mkdir(mode=0o700)
             env = os.environ.copy()
             env.pop('WAYLAND_DISPLAY', None)
+            env.pop('HYPRLAND_INSTANCE_SIGNATURE', None)
             env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', XDG_RUNTIME_DIR=str(runtime), QML_DISABLE_DISK_CACHE='1',
                        XDG_DATA_HOME=str(fixture/'data'), CAPRI_PORT=str(port))
             result = subprocess.run(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, capture_output=True, text=True, timeout=timeout)

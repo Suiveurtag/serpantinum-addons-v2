@@ -1,3 +1,4 @@
+import { uncovered } from './world.mjs';
 // Full-screen effect layer: shards, light beams, the zigzag streak between two teleport
 // points, the void she collapses into and the swirl she comes back from, data glyphs,
 // mane shards drifting off, the stars rising out of her mane, the satellite and the red light
@@ -243,9 +244,10 @@ export function drawEye(ctx, x, y, R, open, look = null) {
 }
 
 export class FxLayer {
+  get ctx() { return this.canvas.getContext('2d'); }
+
   constructor(canvas, { cutins = {}, intro = null } = {}) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
     this.cutins = cutins;
     this.grab = intro?.grab || null; // her close-up for her intro (GRAB_FRAMES), at rest
     this.grabFrames = intro || {};
@@ -797,6 +799,7 @@ export class FxLayer {
   // Whole frames at 24 fps, or every screen refresh while something that moves smoothly is on
   // (her intro: its camera moves follow the clock, its drawings still change on whole frames).
   frame(now) {
+    if (!this.canvas.available || !this.ctx) { requestAnimationFrame(t => this.frame(t)); return; }
     if (now - this.last < FRAME_MS - 2 && !this.items.some((it) => it.smooth)) {
       requestAnimationFrame((t) => this.frame(t));
       return;
@@ -1044,24 +1047,14 @@ export class FxLayer {
   // in front of it (covers()) can be cut out: nothing of hers is drawn over those. `M` px around it
   // can be drawn on too (her lightning on its frame).
   onWindow(it, r, covers, fn, M = 16) {
-    // shortcut: no offscreen canvas in QML, so clip to the window minus its covers (even-odd); two
-    // covers overlapping each other would show through again, upgrade if that's ever seen
     const { ctx } = this;
+    const pieces = uncovered({ x: r.x - M, y: r.y - M, w: r.w + M * 2, h: r.h + M * 2 }, covers ? covers() : []);
+    if (!pieces.length) return;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(r.x - M, r.y - M, r.w + M * 2, r.h + M * 2);
+    for (const p of pieces) ctx.rect(p.x, p.y, p.w, p.h);
     ctx.clip();
-    ctx.beginPath();
-    ctx.rect(r.x - M, r.y - M, r.w + M * 2, r.h + M * 2);
-    for (const c of covers?.() || []) ctx.rect(c.x, c.y, c.w, c.h);
-    ctx.fillRule = 0; // Qt.OddEvenFill
-    ctx.clip();
-    try {
-      fn();
-    } finally {
-      ctx.fillRule = 1; // Qt.WindingFill
-      ctx.restore();
-    }
+    try { fn(); } finally { ctx.restore(); }
   }
 
   // A crack (see crack()), at `k` of the way through being struck (0..1), faded to `alpha`.

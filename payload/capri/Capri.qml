@@ -16,6 +16,7 @@ QtObject {
     property var lastEvent: null
     property string reply: ""
     signal hookEvent(var evt)
+    signal pcReaction(string kind, var data)
     signal command(string name, string arg)
 
     // An act or a move for her (IPC "act"), answered by the CapriEngine on her screen.

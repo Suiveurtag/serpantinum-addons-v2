@@ -8,6 +8,7 @@ console.log = console.error;
 
 const readline = require('node:readline');
 const { createBridge } = require('./lib/bridge');
+const { steamGame } = require('./world');
 
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
 
@@ -16,12 +17,21 @@ function emit(message) {
 }
 
 const server = createBridge({ port: PORT, onEvent: (evt) => emit({ t: 'event', evt }) });
+// A shell reload briefly overlaps the old helper. Retry binding after it releases the port.
+let bindRetries = 0;
+server.on('error', error => {
+  if (error.code === 'EADDRINUSE' && bindRetries++ < 10) setTimeout(() => server.listen(PORT, '127.0.0.1'), 500);
+});
 
 const input = readline.createInterface({ input: process.stdin });
 input.on('line', (line) => {
   let message;
   try { message = JSON.parse(line); } catch { return; }
+  if (message?.t === 'foreground') emit({ t: 'pc', game: steamGame(message) });
   if (message?.t === 'ping') emit({ t: 'pong', id: message.id });
 });
 // The shell closes stdin when Capri turns off or the shell exits: never outlive it.
-input.on('close', () => { server.close(); process.exit(0); });
+function shutdown() { server.close(); process.exit(0); }
+input.on('close', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

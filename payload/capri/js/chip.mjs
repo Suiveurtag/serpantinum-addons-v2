@@ -17,9 +17,10 @@ const STEP = 1000 / 12;
 
 // A small canvas of its own, w x h css px, placed by its top-left corner.
 class Small {
+  get ctx() { return this.canvas.getContext('2d'); }
+
   constructor(canvas, w, h) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
     this.w = w;
     this.h = h;
     this.visible = false;
@@ -63,6 +64,7 @@ class Small {
     requestAnimationFrame(this.loop);
     if (now - this.last < STEP - 1) return;
     this.last = now;
+    if (!this.canvas.available || !this.ctx) return;
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.w, this.h);
     this.draw(now, Math.floor(now / STEP));

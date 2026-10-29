@@ -6,7 +6,9 @@ import "../"
 // Direct ShellRoot child: the IPC target must exist while Capri is OFF.
 Scope {
     id: root
-    readonly property bool sidecarRunning: loader.item ? loader.item.sidecarRunning : false
+    readonly property bool sidecarRunning: loader.status === Loader.Ready && loader.item ? loader.item.sidecarRunning : false
+
+    readonly property var world: loader.status === Loader.Ready && loader.item ? loader.item.environment : null
 
     IpcHandler {
         target: "capri"
@@ -31,6 +33,7 @@ Scope {
         sourceComponent: Scope {
             id: host
             readonly property bool sidecarRunning: sidecar.running
+            readonly property alias environment: environment
             property int restarts: 0
 
             Process {
@@ -38,7 +41,11 @@ Scope {
                 running: true
                 command: ["node", Capri.scripts + "/sidecar.js"]
                 stdinEnabled: true
-                stdout: SplitParser { onRead: line => Capri.ingest(line) }
+                stdout: SplitParser { onRead: line => {
+                    Capri.ingest(line);
+                    try { environment.ingest(JSON.parse(line)); } catch (error) {}
+                } }
+                onRunningChanged: if (running) { environment.sentForeground = ""; environment.sendForeground(); }
                 stderr: SplitParser { onRead: line => console.warn("Capri sidecar:", line) }
                 onExited: code => {
                     if (host.restarts++ < 3) retry.start();
@@ -47,9 +54,17 @@ Scope {
             }
             Timer { id: retry; interval: 5000; onTriggered: sidecar.running = true }
 
+            CapriWorld { id: environment; engine: body; onSend: message => { if (sidecar.running) sidecar.write(JSON.stringify(message) + "\n"); } }
+            CapriEngine {
+                id: body
+                world: environment
+                parent: environment.surface ? environment.surface.contentItem : null
+                width: environment.here ? environment.here.w : 0
+                height: environment.here ? environment.here.h : 0
+            }
             Variants {
                 model: Quickshell.screens
-                delegate: CapriOverlay { required property var modelData; screen: modelData }
+                delegate: CapriOverlay { required property var modelData; screen: modelData; world: environment }
             }
         }
     }

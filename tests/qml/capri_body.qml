@@ -19,7 +19,7 @@ ShellRoot {
         [0, "gaze", "big", s => s.act === "uplink"],
         [9000, "state", "", s => s.act === null && s.fx === 0],
         [0, "throw", "2600,-900", s => s.stance === "fly"],
-        [5500, "state", "", s => s.stance === "stand" && !s.busy && s.y === 714],               // back on the floor (720 - 6)
+        [5500, "state", "", s => s.stance === "stand" && !s.busy && s.y === Quickshell.screens[0].height - 6],               // back on the floor (720 - 6)
         [0, "hurt", "", s => s.act === "flinch"],
         [700, "doze", "", s => s.busy],
         [1200, "state", "", s => s.dormant && s.hidden],
