@@ -31,7 +31,7 @@ FocusScope {
     height: Math.min(engine.height - 28, content.implicitHeight + 30)
     x: Math.max(14, Math.min(engine.width - width - 14, brain.head.x > engine.width / 2 ? brain.head.x - width + 46 : brain.head.x - 46))
     y: Math.max(14, Math.min(engine.height - height - 14, below ? brain.head.y + 40 : brain.head.top - height + 14))
-    visible: brain.message !== null && !brain.suspended && !brain.dnd && !brain.chatController.hiddenForShot
+    visible: brain.message !== null && !brain.suspended && (!brain.dnd || !!msg.chat || !!msg.guide || !!msg.asked) && !brain.chatController.hiddenForShot
     opacity: reduced ? 1 : enter.value
     property real tailX: Math.max(24, Math.min(width - 24, brain.head.x - x))
     FontLoader {
@@ -59,6 +59,7 @@ FocusScope {
         if(msg.at !== messageAt) {messageAt=msg.at||0;refresh();}
         else if(msg.chat) {if(reduced)decoded=msg.line||"";else if(visible)decode.restart();}
     }
+    function submit(text) { if(!brain.runtime.panel.send(text)) brain.chatController.submit(text); }
     function focusChat() { if(visible && msg.chat) chatEntry.forceActiveFocus(); }
     Keys.onEscapePressed: brain.runtime.panel.hide()
     onVisibleChanged: if (visible) {
@@ -117,6 +118,7 @@ FocusScope {
             for (let i = panel.letters; i < Math.min(line.length, panel.letters + 6); i++)
                 tail += line[i] === " " ? " " : noise[Math.floor(Math.random() * noise.length)];
             panel.decoded = line.slice(0, panel.letters) + tail;
+            if (engine.voice && line[panel.letters - 1] && line[panel.letters - 1] !== " ") engine.voice.play("blip", { mood: panel.msg.kind });
             if (panel.letters >= line.length)
                 stop();
         }
@@ -270,7 +272,7 @@ FocusScope {
                 font.family: ThemeBackend.fontFamily
                 font.pixelSize: 11
                 wrapMode: Text.Wrap
-                maximumLineCount: panel.msg.kind === "alert" ? 12 : 3
+                maximumLineCount: panel.msg.kind === "alert" || panel.msg.guide ? 12 : 3
                 elide: Text.ElideRight
             }
             Rectangle {
@@ -421,18 +423,19 @@ FocusScope {
                     enabled:!panel.msg.chatBusy
                     placeholderText:panel.msg.chat ? panel.msg.chat.placeholder : ""
                     Accessible.name:placeholderText
+                    echoMode:panel.msg.chat && panel.msg.chat.secret ? TextInput.Password : TextInput.Normal
                     color:"#fcf2f6";placeholderTextColor:"#d6c5d0";selectByMouse:true
                     font.family:ThemeBackend.fontFamily
                     background:Rectangle {color:"#2a203b";border.color:chatEntry.activeFocus?"#36ff73":"#7d3af5"}
-                    onAccepted: {if(text.trim()){brain.chatController.submit(text);clear();}}
+                    onAccepted: {if(text.trim()){panel.submit(text);clear();}}
                 }
                 Flow {
                     width:parent.width;spacing:8
-                    CapriButton {text:panel.msg.chat?panel.msg.chat.send:"";primary:true;enabled:!panel.msg.chatBusy && !!chatEntry.text.trim();onClicked:{brain.chatController.submit(chatEntry.text);chatEntry.clear();}}
+                    CapriButton {text:panel.msg.chat?panel.msg.chat.send:"";primary:true;enabled:!panel.msg.chatBusy && !!chatEntry.text.trim();onClicked:{panel.submit(chatEntry.text);chatEntry.clear();}}
                     CapriButton {text:panel.msg.chat?panel.msg.chat.close:"";onClicked:brain.runtime.panel.hide()}
                 }
                 Text {
-                    width:parent.width;text:panel.msg.chat ? panel.msg.chat.noteTag+" · "+panel.msg.chat.note : ""
+                    width:parent.width;visible:!!text;text:panel.msg.chat ? [panel.msg.chat.noteTag,panel.msg.chat.note].filter(Boolean).join(" · ") : ""
                     color:"#b7a4bd";font.family:ThemeBackend.fontFamily;font.pixelSize:10;wrapMode:Text.Wrap
                 }
             }

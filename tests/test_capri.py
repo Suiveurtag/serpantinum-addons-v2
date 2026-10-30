@@ -43,6 +43,8 @@ class CapriPatchTests(unittest.TestCase):
         patched = capri.patch_keybind(original, shell_qml)
         self.assertEqual(capri.patch_keybind(patched, shell_qml), patched)
         self.assertIn('ipc call capri toggle', patched)
+        self.assertIn('hl.bind("CTRL + ALT + C", hl.dsp.exec_cmd(', patched)
+        self.assertIn("ipc call capri act stowToggle ''", patched)
         self.assertEqual(capri.remove(patched), original)
         custom = patched.replace('SUPER + SHIFT + K', 'CTRL + ALT + F9')
         self.assertEqual(capri.patch_keybind(custom, shell_qml), custom)
@@ -54,7 +56,7 @@ class CapriPatchTests(unittest.TestCase):
                 path.parent.mkdir(parents=True)
                 path.write_text(custom)
                 rows = [row for row in control.keybinds()['rows'] if 'ipc call capri' in (row['command'] or '')]
-                self.assertEqual([row['key'] for row in rows], ['CTRL + ALT + F9'])
+                self.assertEqual([row['key'] for row in rows], ['CTRL + ALT + F9', 'CTRL + ALT + C'])
         finally:
             control.CONFIG = old_config
         with self.assertRaises(ValueError):
@@ -73,7 +75,10 @@ class CapriPatchTests(unittest.TestCase):
     def test_settings_option_is_owned_by_capri_only(self):
         tab = (ROOT/'payload/AddonsTab.qml').read_text()
         self.assertIn('CapriSettings', tab)
+        self.assertIn('CapriCard', (ROOT/'payload/capri/CapriSettings.qml').read_text())
+        self.assertIn('CapriCard 1.0 capri/CapriCard.qml', capri.TYPES)
         self.assertIn('CapriSettings', seasonal.remove(tab))
+        self.assertIn('addons_capri_shortcut_passive', tab)
         stripped = capri.remove(tab)
         self.assertNotIn('Capri', stripped)
         self.assertIn('HalloweenCard', stripped)
@@ -95,6 +100,16 @@ class CapriSidecarTests(unittest.TestCase):
         result = subprocess.run(['node', str(ROOT/'tests/capri/brain.mjs')], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('CAPRI_BRAIN_PASS', result.stdout)
+
+    def test_guide_setup_custom_look_and_sounds(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/guide.mjs')], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_GUIDE_PASS', result.stdout)
+
+    def test_setup_look_and_agy_sidecar(self):
+        result = subprocess.run(['node', str(ROOT/'tests/capri/setup.cjs')], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('CAPRI_SETUP_PASS', result.stdout)
 
     def hooks(self, env, action, target):
         result = subprocess.run(['node', str(SCRIPTS/'hooks.js'), action, target], env=env, capture_output=True, text=True, timeout=10)
@@ -203,6 +218,10 @@ class CapriRuntimeTests(unittest.TestCase):
         output = self.run_fixture('capri_chat.qml', 45)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Unhandled|Binding loop|Cannot assign|Unable to assign|Error:')
 
+    def test_settings_card_controls_and_lifetimes(self):
+        output = self.run_fixture('capri_settings.qml', 35)
+        self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Binding loop|Cannot assign|Unable to assign|Error:')
+
     def test_native_ui_layout(self):
         output = self.run_fixture('capri_ui.qml', 30)
         self.assertNotRegex(output, r'TypeError|ReferenceError|SyntaxError|RangeError|Binding loop|Cannot assign|Unable to assign')
@@ -236,7 +255,8 @@ FloatingWindow {
             (fixture/'Config.qml').write_text('''pragma Singleton
 import QtQuick
 QtObject {
-    property var rawSettings: ({})
+    // past her first-run welcome and animations question, and silent: each fixture covers its own dialogue
+    property var rawSettings: ({"addonsV2CapriWelcomed": true, "addonsV2CapriMotionAsked": true, "addonsV2CapriMuted": true})
     function getSetting(key, fallback) { return rawSettings[key] === undefined ? fallback : rawSettings[key]; }
     function setSetting(key, value) { const next = Object.assign({}, rawSettings); next[key] = value; rawSettings = next; }
 }
@@ -246,6 +266,15 @@ QtObject {
             (fixture/'SysNotif.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property bool hasBattery: false; property int batteryPercentage: 100; property bool isCharging: false }\n')
             (fixture/'I18n.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string currentLang: \"en\" }\n')
             (fixture/'ThemeBackend.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string fontFamily: \"DejaVu Sans Mono\"; property color base: \"#120c1c\" }\n')
+            if scenario == 'capri_settings.qml':
+                shutil.copytree(installer.QS/'reusables', fixture/'reusables')
+                shutil.copytree(ROOT/'payload/seasonal', fixture/'seasonal')
+                (fixture/'qmldir').write_text(seasonal.patch_qmldir((fixture/'qmldir').read_text()) + 'singleton Caching 1.0 Caching.qml\nsingleton Sounds 1.0 Sounds.qml\n')
+                (fixture/'Caching.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string mainQml: "' + str(fixture/'Shell.qml') + '" }\n')
+                (fixture/'Sounds.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { function playSfx(path) {} }\n')
+                (fixture/'I18n.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { function t(key) { return key; } property string currentLang: "en"; property bool rtl: false; readonly property int layoutDirection: rtl ? Qt.RightToLeft : Qt.LeftToRight; readonly property int textAlignment: rtl ? Qt.AlignRight : Qt.AlignLeft }\n')
+                colors = {'base':'#1e1e2e','mantle':'#181825','crust':'#11111b','text':'#cdd6f4','subtext0':'#a6adc8','subtext1':'#bac2de','surface0':'#313244','surface1':'#45475a','surface2':'#585b70','overlay0':'#6c7086','overlay1':'#7f849c','overlay2':'#9399b2','blue':'#89b4fa','mauve':'#cba6f7','green':'#a6e3a1','red':'#f38ba8','pink':'#f5c2e7','yellow':'#f9e2af'}
+                (fixture/'ThemeBackend.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property string fontFamily: "DejaVu Sans Mono"; property string iconFont: "Iosevka Nerd Font"; property bool liquidGlass: false; property bool glassActive: false; property real elementOpacity: 1; property real borderRadius: 16; property real clampedBorderRadius: 16; ' + '; '.join('property color '+k+': "'+v+'"' for k,v in colors.items()) + ' }\n')
             with socket.socket() as probe:
                 probe.bind(('127.0.0.1', 0))
                 port = probe.getsockname()[1]
@@ -256,6 +285,14 @@ QtObject {
             env.pop('HYPRLAND_INSTANCE_SIGNATURE', None)
             env.update(QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', XDG_RUNTIME_DIR=str(runtime), QML_DISABLE_DISK_CACHE='1',
                        XDG_DATA_HOME=str(fixture/'data'), XDG_STATE_HOME=str(fixture/'state'), CAPRI_TEST_SERVER=str(ROOT/'tests/capri/chat-server.cjs'), CAPRI_PORT=str(port))
+            # never the real agent homes; outside Settings her hooks are already in, so no connect welcome
+            env.update(CLAUDE_CONFIG_DIR=str(fixture/'claude'), CODEX_HOME=str(fixture/'codex'), AGY_CONFIG_DIR=str(fixture/'agy'))
+            if scenario != 'capri_settings.qml':
+                for agent in ('claude', 'codex', 'agy'):
+                    subprocess.run(['node', str(SCRIPTS/'hooks.js'), 'install', agent], env=env, check=True, capture_output=True)
+            if scenario == 'capri_settings.qml':
+                if os.environ.get('CAPRI_SETTINGS_GPU'):
+                    env.update(QT_QUICK_BACKEND='rhi', QT_RHI_BACKEND='opengl')
             process = subprocess.Popen(['quickshell', '-p', str(fixture/'Shell.qml')], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
             try:
                 stdout, stderr = process.communicate(timeout=timeout)

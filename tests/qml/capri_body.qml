@@ -38,11 +38,13 @@ ShellRoot {
         interval: 50; running: true
         onTriggered: {
             // Dialogue is covered in capri_brain.qml; keep this fixture on the body and its own FX.
-            if (!isolated && addon.world && addon.world.engine.capri) {
+            if (!isolated && addon.world && addon.world.engine.capri && addon.world.engine.brain.runtime) {
                 const c = addon.world.engine.capri;
+                addon.world.engine.brain.runtime.panel.say = () => false;
                 c.onGaze = null; c.onThrown = null; c.wander = false; c.possessWindows = false;
                 c.nextMove = Infinity; c.nextGaze = Infinity; c.nextTwitch = Infinity; c.nextShed = Infinity; isolated = true;
             }
+            if (!isolated) { start(); return; } // her brain comes up a moment after her body
             if (i > 0) {
                 const step = shell.steps[i - 1];
                 const answer = Capri.act(step[1], step[2]);
@@ -53,7 +55,9 @@ ShellRoot {
                     return;
                 }
             }
-            if (i >= shell.steps.length) { console.log("CAPRI_PASS"); Qt.quit(); return; }
+            if (i >= shell.steps.length) { Config.setSetting("addonsV2CapriScale",0.8);
+                if (addon.world.engine.capri.scale !== 0.8) { console.error("CAPRI_FAIL","live config scale");Qt.exit(1);return; }
+                console.log("CAPRI_PASS"); Qt.quit(); return; }
             interval = Math.max(50, shell.steps[i][0]);
             i++;
             start();

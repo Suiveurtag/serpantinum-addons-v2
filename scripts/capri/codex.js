@@ -20,7 +20,8 @@ function models(cfg) {
   }));
 }
 async function chat(cfg, {
-  messages
+  messages,
+  images = []
 }, onDelta, signal) {
   signal.throwIfAborted();
   const base = path.join(process.env.XDG_RUNTIME_DIR || os.tmpdir(), `capri-chat-${process.getuid()}`);
@@ -39,6 +40,14 @@ async function chat(cfg, {
     mode: 0o600
   });
   const args = ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only', '-c', 'approval_policy="never"', '-c', 'model_reasoning_effort="low"', '-c', `model_instructions_file=${JSON.stringify(persona)}`, '--disable', 'hooks', '--disable', 'memories', '--disable', 'plugins', '--disable', 'apps', '--disable', 'shell_tool', '--disable', 'unified_exec', '--disable', 'browser_use', '--disable', 'computer_use', '-c', 'web_search="disabled"', '-C', empty];
+  // a picture of the screen (look): attached by the CLI itself, before -C so "-" stays the prompt
+  images.forEach((jpeg, i) => {
+    const file = path.join(dir, `screen-${i}.jpg`);
+    fs.writeFileSync(file, Buffer.from(jpeg, 'base64'), {
+      mode: 0o600
+    });
+    args.splice(args.indexOf('-C'), 0, '-i', file);
+  });
   if (cfg.codexModel) args.push('-m', cfg.codexModel);
   args.push('-');
   const history = messages.slice(1, -1).map(m => `${m.role === 'user' ? 'User' : 'Capri'}: ${m.content}`).join('\n');

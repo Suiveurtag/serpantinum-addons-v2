@@ -43,7 +43,7 @@ class ChangeTests(unittest.TestCase):
     def test_addons_options_and_weather_patch_preserve_each_other(self):
         general = (ROOT/'payload/AddonsTab.qml').read_text()
         mouse = (ROOT/'payload/AddonsMouseTab.qml').read_text()
-        for option in ('HalloweenCard', 'addons_mullvad_dns', 'addonsV2ObfuscateWeatherCity'):
+        for option in ('HalloweenCard', 'CapriSettings', 'addons_mullvad_dns', 'addonsV2ObfuscateWeatherCity'):
             with self.subTest(option=option):
                 self.assertIn(option, general)
         for option in ('addons_mouse_spotlight', 'addons_mouse_acceleration', 'addons_trackpad_speed',

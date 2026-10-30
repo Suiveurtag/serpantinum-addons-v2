@@ -56,9 +56,13 @@ Item {
             get: (key, fallback) => root.get(key, fallback),
             lang: () => root.lang,
             setConfig: patch => {
-                for (const key of Object.keys(patch))
-                    Config.setSetting("addonsV2Capri" + key[0].toUpperCase() + key.slice(1), patch[key]);
+                // upstream names: "claude" is whether she watches it; "visible" is her stow state, kept by the body
+                for (const key of Object.keys(patch)) {
+                    if (key === "visible") continue;
+                    Config.setSetting("addonsV2Capri" + (key === "claude" ? "Watching" : key[0].toUpperCase() + key.slice(1)), patch[key]);
+                }
             },
+            voice: engine.voice,
             quiet: () => root.dnd,
             changed: panel => {
                 root.message = panel.visible ? Object.assign({}, panel.current) : null;
@@ -98,6 +102,7 @@ Item {
         head = engine.capri.head();
         revision++;
         chatController.start();
+        chatController.rpc("sounds").then(list => engine.voice.loadCustom(list));
         windows();
         const queued = pendingEvents; pendingEvents = [];
         queued.forEach(evt => root.handle(evt));
@@ -145,8 +150,26 @@ Item {
         switch (name) {
         case "chat": chatController.open(); return "ok";
         case "send": chatController.submit(arg); return "ok";
-        case "ai": chatController.showSettings(); return "ok";
+        case "ai": chatController.showSettings(); chatSettings.personal = false; return "ok";
+        case "personal": chatController.showSettings(); chatSettings.personal = true; return "ok";
+        case "reminders": menuOpen = true; reminderOpen = false; menu.page = "reminders"; return "ok";
         case "forget": chatController.forget(); return "ok";
+        case "help": case "welcome": case "guide": case "look": case "lookAuto": case "setup": case "key": case "free": case "customize": case "answer":
+            return chatController.command(name, arg);
+        case "stowToggle":
+            if (engine.capri.stowed) engine.capri.unstow(); else engine.capri.stow();
+            return "ok";
+        case "sounds":
+            chatController.rpc("openSounds");
+            return "ok";
+        case "hooks":
+            chatController.rpc(arg === "off" ? "uninstallHooks" : "installHooks", {assistant: runtime.brain.assistant}).then(res => {
+                const t = runtime.brain.t;
+                runtime.panel.say(res && res.ok ? {kind:"done", line: arg === "off" ? t.hooksRemoved : t.hooksOk, hold:6000, asked:true}
+                    : {kind:"error", line: Util.fmt(t.hooksFail, {error: res && res.error || "…"}), hold:7000, asked:true});
+                if (res && res.ok && arg !== "off") engine.voice.play("hello");
+            });
+            return "ok";
         case "brain":
             return JSON.stringify({
                 lang,
@@ -213,7 +236,7 @@ Item {
     Component.onDestruction: if (runtime)
         Capri.saveFinal(runtime.bond.data, runtime.mission.day)
     onDndChanged: if (dnd && runtime) {
-        runtime.panel.hide();
+        if (!message || !message.chat) runtime.panel.hide();
         menuOpen = false;
         reminderOpen = false;
         chatController.settingsOpen = false;
@@ -233,6 +256,7 @@ Item {
         function onRawSettingsChanged() {
             if (root.runtime) {
                 root.runtime.configure();
+                chatController.configureLook();
                 root.revision++;
             }
         }

@@ -8,6 +8,7 @@ FocusScope {
     required property var brain
     required property var engine
     property string page: ""
+    property var hooks: null   // her hooks for the assistant she watches, read when the menu opens
     readonly property var reminderUi: Labels.REMINDER_UI[brain.lang] || Labels.REMINDER_UI.en
     readonly property var t: Labels.TRAY[brain.lang] || Labels.TRAY.en
     readonly property var rows: {
@@ -21,6 +22,8 @@ FocusScope {
     y: Math.max(14, Math.min(engine.height - height - 14, brain.head.y - height))
     onVisibleChanged: if (visible) {
         page = "";
+        hooks = null;
+        if (brain.runtime) brain.chatController.rpc("hooksStatus", {assistant: brain.runtime.brain.assistant}).then(s => menu.hooks = s || null);
         forceActiveFocus();
         if (brain.reminderOpen)
             entry.forceActiveFocus();
@@ -40,6 +43,8 @@ FocusScope {
             value: !brain.get(key, fallback)
         };
     }
+    // upstream: the tray's "Claude Code" is whichever assistant she watches
+    function named(s) { const n = ({codex:"Codex", agy:"Antigravity"})[brain.runtime.brain.assistant]; return n ? String(s).split("Claude Code").join(n) : s; }
     function build() {
         if (!brain.runtime)
             return [];
@@ -51,6 +56,10 @@ FocusScope {
                         key: "Scale",
                         value: v[0]
                     }));
+        case "ai":
+            return [{label:t.aiSetup,cmd:"setup"},{label:t.chatModel + "…",act:"ai"},{label:t.apiKey,cmd:"key"},{label:t.cloudSignin,signin:true},{label:t.forget,forget:true}];
+        case "sound":
+            return [setting("Muted", t.mute, false),{label:t.soundsDir,cmd:"sounds"}];
         case "rest":
             return [{label:t.restCorner,key:"Rest",value:"corner"},{label:t.restTaskbar,key:"Rest",value:"taskbar"}];
         case "motion":
@@ -113,10 +122,11 @@ FocusScope {
                     label: t.demo,
                     act: "demo"
                 },
+                {label:t.help,cmd:"help"},
                 {label:t.talk,act:"chat"},
-                {label:t.chatModel,act:"ai"},
-                {label:t.custom,custom:true},
-                {label:t.forget,forget:true},
+                {label:t.lookNow,cmd:"look"},
+                {label:t.chatModel,page:"ai"},
+                {label:t.custom,cmd:"customize"},
                 {
                     label: t.report,
                     act: "report",
@@ -138,7 +148,9 @@ FocusScope {
                     label: t.screen,
                     page: "screen"
                 },
+                {label:t.sound,page:"sound"},
                 setting("Wander", t.wander, true), setting("Possess", t.possess, true), setting("Jealous", t.jealous, true), setting("PcReact", t.pcReact, true),
+                {label:(brain.get("WatchScreen", false) ? "✓  " : "   ") + t.lookAuto, cmd:"lookAuto", arg:brain.get("WatchScreen", false) ? "off" : "on"},
                 {
                     label: t.rest, page: "rest"
                 },
@@ -148,7 +160,9 @@ FocusScope {
                 {
                     label: t.watch,
                     page: "watch"
-                },
+                }].concat(!r.brain.watching || !menu.hooks ? [] : menu.hooks.installed
+                    ? [{label:named(t.hooksOn),disabled:true},{label:named(t.hooksRemove),cmd:"hooks",arg:"off"}]
+                    : [{label:named(t.hooksOff),cmd:"hooks",arg:"on"}]).concat([
                 {
                     label: t.lang,
                     page: "lang"
@@ -157,7 +171,7 @@ FocusScope {
                     label: t.quit,
                     disable: true
                 }
-            ];
+            ]);
         }
     }
     function choose(row) {
@@ -170,14 +184,23 @@ FocusScope {
             if (row.key === "Scale")
                 engine.capri.setScale(row.value);
         } else if (row.watch) {
+            const before = brain.runtime.brain.watching ? brain.runtime.brain.assistant : "none";
             brain.runtime.panel.hide();
             Config.setSetting("addonsV2CapriLinked", false);
             if (row.watch !== "none")
                 Config.setSetting("addonsV2CapriAssistant", row.watch);
             Config.setSetting("addonsV2CapriWatching", row.watch !== "none");
-        } else if(row.custom) {
-            brain.chatController.showSettings();brain.chatSettings.personal=true;
-        } else if(row.forget) brain.chatController.forget();
+            // a new one: she says hi and offers to plug herself in (upstream "assistantChanged")
+            if (row.watch !== "none" && row.watch !== before) {
+                Config.setSetting("addonsV2CapriWelcomed", false);
+                Qt.callLater(() => brain.command("welcome", ""));
+            }
+        } else if (row.cmd) {
+            brain.menuOpen = false;
+            brain.command(row.cmd, row.arg || "");
+            return;
+        } else if (row.signin) brain.chatController.rpc("ollamaSignin");
+        else if(row.forget) brain.chatController.forget();
         else if (row.screen)
             engine.world.goToScreen(row.screen, true);
         else if (row.cancel) {

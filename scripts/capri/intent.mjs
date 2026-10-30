@@ -223,7 +223,7 @@ const simple = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]
 
 export function parseIntent(text, apps=[], waitingWhen=null) {
   const now=Date.now();
-  const result=Intent.prototype.asked.call({apps, waitingWhen, reminders:true, look:null, askedToClose:Intent.prototype.askedToClose},text);
+  const result=Intent.prototype.asked.call({apps, waitingWhen, reminders:true, look:true, askedToClose:Intent.prototype.askedToClose},text);
   // Follow-up times need the same bounds as a full reminder request, checked only in Node.
   if(result?.kind==='remind' && result.at && (result.at-now<5000 || result.at-now>604800000))return {...result,at:null};
   return result;

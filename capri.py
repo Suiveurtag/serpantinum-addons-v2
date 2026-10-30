@@ -5,8 +5,9 @@ import shlex
 
 MARK = 'serpantinum-capri-v2'
 TYPES = ['singleton Capri 1.0 capri/Capri.qml'] + [f'{name} 1.0 capri/{name}.qml' for name in
-         ('AddonCapri', 'CapriOverlay', 'CapriWorld', 'CapriEngine', 'CapriPet', 'CapriSettings', 'CapriBrain', 'CapriPanel', 'CapriTicker', 'CapriMenu', 'CapriPlate', 'CapriButton', 'CapriChat', 'CapriChatSettings')]
+         ('AddonCapri', 'CapriOverlay', 'CapriWorld', 'CapriEngine', 'CapriPet', 'CapriSettings', 'CapriCard', 'CapriCardPreview', 'CapriSwitch', 'CapriBrain', 'CapriPanel', 'CapriTicker', 'CapriMenu', 'CapriPlate', 'CapriButton', 'CapriChat', 'CapriChatSettings', 'CapriVoice')]
 CHORD = 'SUPER + SHIFT + K'
+STOW_CHORD = 'CTRL + ALT + C'  # upstream's shortcut: put her away / bring her back
 
 
 def patch_qmldir(text):
@@ -27,17 +28,26 @@ def patch_shell(text):
 
 
 def patch_keybind(text, shell_qml):
+    text = _bind(text, 'keybind', CHORD, 'toggle', shell_qml)
+    return _bind(text, 'stow', STOW_CHORD, "act stowToggle ''", shell_qml)
+
+
+def _bind(text, name, chord, call, shell_qml):
     # Preserve user edits and deletions inside the managed block on reinstall.
-    marker = f'-- BEGIN {MARK} keybind'
+    marker = f'-- BEGIN {MARK} {name}'
     if marker in text: return text
-    if f'"{CHORD}"' in text: raise ValueError('Capri shortcut already in use')
-    command = 'quickshell -p ' + shlex.quote(str(shell_qml)) + ' ipc call capri toggle'
-    return text.rstrip() + '\n\n' + marker + '\n' + f'hl.bind("{CHORD}", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n' + f'-- END {MARK} keybind\n'
+    if f'"{chord}"' in text: raise ValueError(f'Capri shortcut {chord} already in use')
+    command = 'quickshell -p ' + shlex.quote(str(shell_qml)) + ' ipc call capri ' + call
+    return text.rstrip() + '\n\n' + marker + '\n' + f'hl.bind("{chord}", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n' + f'-- END {MARK} {name}\n'
 
 
 def remove_blocks(text):
     text = re.sub(r'^[ ]*// BEGIN ' + MARK + r' ([^\n]+)\n.*?^[ ]*// END ' + MARK + r' \1\n', '', text, flags=re.S | re.M)
-    return re.sub(r'\n*^-- BEGIN ' + MARK + r' ([^\n]+)\n.*?^-- END ' + MARK + r' \1\n', '\n', text, flags=re.S | re.M)
+    # one Lua block at a time: adjacent blocks would each leave a blank line behind
+    lua = re.compile(r'\n*^-- BEGIN ' + MARK + r' ([^\n]+)\n.*?^-- END ' + MARK + r' \1\n', re.S | re.M)
+    while lua.search(text):
+        text = lua.sub('\n', text, count=1)
+    return text
 
 
 def remove(text):

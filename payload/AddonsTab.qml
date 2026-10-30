@@ -19,6 +19,7 @@ Item {
     transform: Translate { y: root.slideY }
     Behavior on opacity { NumberAnimation { duration: 250 } }
     Flickable {
+        id: addonsViewport
         anchors.fill: parent; anchors.margins: rootObj.s(24); contentWidth: width; contentHeight: settings.implicitHeight; clip: true
         ColumnLayout {
             id: settings; width: parent.width; spacing: rootObj.s(8)
@@ -26,7 +27,7 @@ Item {
             HalloweenCard { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-night-v2 option
             // BEGIN serpantinum-capri-v2 option
-            CapriSettings { rootObj: root.rootObj; Layout.bottomMargin: rootObj.s(6) }
+            CapriSettings { rootObj: root.rootObj; viewport: addonsViewport; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-capri-v2 option
             SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_weather_city_obfuscation"; searchTab: "addons"; searchKeywords: "weather city location privacy obfuscated météo ville localisation"
@@ -125,6 +126,9 @@ Item {
 
                     Repeater {
                         model: [
+                            // BEGIN serpantinum-capri-v2 shortcut
+                            { id: "addons_capri_shortcut_passive", title: "Capri shortcut", icon: "󰩃", keywords: "capri pet desktop companion compagnon Super Shift K ipc call capri toggle", detail: "Super+Shift+K · Toggle the desktop companion", status: "Shortcut" },
+                            // END serpantinum-capri-v2 shortcut
                             { id: "addons_passive_desktop_draw", title: "Desktop drawing", icon: "󰏫", keywords: "desktop draw drawing annotation pen circle rectangle dessiner entourer dessin addonDesktopDraw", detail: "Super+Shift+D · Draw, circle or box · Esc to close" },
                             { id: "addons_passive_desktop_zoom", title: "Desktop zoom", icon: "󰍉", keywords: "desktop zoom magnifier loupe souris curseur raccourci addonDesktopZoom", detail: "Super+Shift+Z · Scroll to zoom · Esc to close" },
                             { id: "addons_passive_color_picker", title: "Color picker", icon: "󰈊", keywords: "color picker pipette palette couleur", detail: "Super+Shift+C" },
@@ -160,7 +164,7 @@ Item {
                                     }
                                     Text {
                                         id: enabledLabel
-                                        text: "Enabled"
+                                        text: modelData.status || "Enabled"
                                         color: ThemeBackend.green
                                         font.family: ThemeBackend.fontFamily
                                         font.pixelSize: rootObj.s(10)

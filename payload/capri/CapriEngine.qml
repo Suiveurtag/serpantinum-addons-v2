@@ -15,12 +15,15 @@ Item {
     readonly property alias maskBox: maskCanvas
     readonly property alias chipBox: chipCanvas
     readonly property alias brain: brain
+    readonly property alias voice: voice
     readonly property var cutins: ["grin", "laugh", "eyes", "many", "look"]
     readonly property var cels: ["grab", "mouth1", "mouth2", "mouth3", "wave1", "wave2", "wave3", "smear", "happy"]
     readonly property var images: cutins.map(k => asset("cutin-" + k + ".png"))
         .concat(cels.map(k => asset("intro-" + k + ".webp")))
         .concat(["paper", "ink", "violet"].map(k => asset("intro-flat-" + k + ".png")))
         .concat(["r", "g", "b"].map(k => asset("intro-channel-" + k + ".webp")))
+    readonly property real configuredScale: Config.getSetting("addonsV2CapriScale", 0.6)
+    onConfiguredScaleChanged: if (capri) capri.setScale(configuredScale)
     property var world: null
     property var capri: null
     property var fx: null
@@ -72,7 +75,7 @@ Item {
         mask = new Forms.Mask(maskCanvas);
         chip = new Forms.Chip(chipCanvas);
         chip.place(width, height);
-        capri = new Body.Capri({ fx, voice: { play() {} }, host: {
+        capri = new Body.Capri({ fx, voice: { play: (cue, opts) => voice.play(cue, opts) }, host: {
             width, height,
             draw: p => pet.draw(p),
             resize: scale => pet.scale = scale,
@@ -127,6 +130,7 @@ Item {
         onTriggered: Util.pump()
     }
 
+    CapriVoice { id: voice }
     CapriBrain { id: brain; engine: engine }
 
     CapriPet {

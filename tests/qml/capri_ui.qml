@@ -25,8 +25,8 @@ ShellRoot {
                 r.panel.say({kind:"alert",line:"Waiting on your green light.",quote:"Capri needs permission to continue this task.",hold:null});break;
             case 1: shell.capture("permission",e.brain.bubble); break;
             case 2:
-                r.panel.hide();r.mission.data={date:"2026-10-29",prompts:5,missions:4,actions:76,files:12,errors:1,approvals:2,longest:{ms:126000,project:"capri"},projects:["capri"],reported:false};r.brain.report();break;
-            case 3: if(!e.brain.wantsFocus || !e.brain.bubble.activeFocus){console.error("CAPRI_FAIL","report focus");Qt.exit(1);return;} shell.capture("report",e.brain.bubble);break;
+                r.panel.hide();r.mission.data={date:Qt.formatDate(new Date(),"yyyy-MM-dd"),prompts:5,missions:4,actions:76,files:12,errors:1,approvals:2,longest:{ms:126000,project:"capri"},projects:["capri"],reported:false};r.brain.report();break;
+            case 3: if(!e.brain.wantsFocus || !e.brain.bubble.activeFocus){console.error("CAPRI_FAIL","report focus",e.brain.wantsFocus,e.brain.bubble.activeFocus,JSON.stringify(e.brain.message && {kind:e.brain.message.kind,line:e.brain.message.line,guide:e.brain.message.guide}));Qt.exit(1);return;} shell.capture("report",e.brain.bubble);break;
             case 4: r.panel.hide();Config.setSetting("addonsV2CapriLanguage","ru");r.brain.status();break;
             case 5: shell.capture("russian",e.brain.bubble);break;
             case 6: r.panel.hide();e.brain.openMenu();break;

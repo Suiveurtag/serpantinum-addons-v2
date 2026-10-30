@@ -25,7 +25,8 @@ export class Runtime {
         return typeof value==='function' ? (...args)=> (!host.quiet() || ['setMode','stopPointing'].includes(key) ? value.apply(capri,args) : false) : value;
       },set:value=>capri[key]=value});
     }
-    this.brain=new Brain({capri:facade,panel:this.panel,voice:{play(){}},host,mission:this.mission,lang:host.lang(),assistant:host.get('Assistant','codex')});
+    this.voice=host.voice || {play(){}};
+    this.brain=new Brain({capri:facade,panel:this.panel,voice:this.voice,host,mission:this.mission,lang:host.lang(),assistant:host.get('Assistant','codex')});
     this.bond=new Bond({host,data:host.get('Bond',null)}); this.brain.bond=this.bond; capri.fondness=this.bond.stage;
     this.jealousy=new Jealousy({capri,panel:this.panel,brain:this.brain,bond:this.bond,chat:{open:false},guide:{running:false}});
     const free=this.jealousy.free.bind(this.jealousy); this.jealousy.free=()=>!host.quiet() && free();
@@ -33,7 +34,7 @@ export class Runtime {
     this.reminders=new Reminders({host,list:host.get('Reminders',[])});
     this.reminders.onDue=r=>this.remind(r).catch(error=>{console.warn("Capri reminder:",error);this.reminders.snooze(r.id,60000);});
     this.brain.linked=host.get('Linked',false);
-    this.brain.onLinked=()=> {host.setConfig({linked:true,welcomed:true}); if(!host.quiet()) {capri.perform('hop');this.panel.say({kind:'done',badge:'LINK',line:this.brain.t.welcome.linked,hold:6000});} };
+    this.brain.onLinked=()=> {host.setConfig({linked:true,welcomed:true}); if(!host.quiet()) {this.voice.play('hello');capri.perform('hop');this.panel.say({kind:'done',badge:'LINK',line:this.brain.t.welcome.linked,hold:6000});} };
     this.newStage=0; this.throws=[];
     this.bond.onStage=stage=> {this.newStage=stage; capri.fondness=stage;};
     this.bond.onCalm=()=> {this.jealousy.forgive();capri.refuseUntil=0;};
@@ -71,6 +72,7 @@ export class Runtime {
     if(!this.newStage || !this.quiet())return;
     const n=this.newStage;this.newStage=0;const up=this.brain.t.bond.up[n],b=this.bond,c=this.capri;
     if(!['angry','sulk'].includes(b.feeling))b.feel('happy',{percent:b.percent});
+    this.voice.play('star');
     co(function*(){yield c.perform('split');c.perform('hop');this.panel.say({kind:'done',badge:this.brain.t.state.info+' '+b.percent+'%',face:n>=3?'laugh':'look',line:fmt(up.line,{percent:b.percent}),quote:up.quote,progress:b.percent/100,hold:9000});}.call(this));
   }
   thrown({how,hard=0}) {
@@ -91,6 +93,8 @@ export class Runtime {
     if((kind==='low' || kind==='critical') && typeof data.level==='number')data=Object.assign({},data,{level:Math.round(data.level*100)});
     let lines=this.brain.t.pc[kind];
     if(kind==='plugIn'||kind==='plugOut')lines=lines[data.kind] || lines.device;
+    const cue={hot:'charge',offline:'error',online:'hello'}[kind];
+    if(lines && cue)this.voice.play(cue);
     if(lines)this.panel.say({kind:kind==='critical'?'error':'info',line:fmt(pick(lines),data),hold:4500});
   }
   remind(r) {
@@ -101,6 +105,7 @@ export class Runtime {
       const t=self.brain.t.remind,time=h.clock(r.at,self.brain.lang),missed=r.at<self.startedAt-60000;
       const line=missed?fmt(r.text?t.missed:t.missedBare,{text:r.text,time}):fmt(pick(r.text?t.now:t.nowBare),{text:r.text});
       let answered=false;
+      self.voice.play('remind');
       const onAction=id=> {answered=true;if(id==='snooze'){rs.snooze(r.id,600000);p.hide();p.say({kind:'info',line:t.snoozed,hold:2500});}else {rs.remove(r.id);self.bond.add('remind',2);p.hide();p.say({kind:'info',line:pick(t.doneLine),hold:2500});}};
       if(self.chat && self.chat.open) {
         const until=performance.now()+30000;

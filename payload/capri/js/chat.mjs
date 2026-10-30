@@ -256,6 +256,7 @@ export class Chat {
       // what you asked for plainly happens right away (the music, the volume, an app you named): her
       // line about it comes under her answer (Claude Code, answering her chat, does things its own way)
       const asked = _this2.agent ? null : yield _this2.host.chatIntent(text, _this2.apps, _this2.waitingWhen);
+      if (asked && asked.kind === 'look' && _this2.look) return _this2.sendLook(text, id);
       if (_this2.turn !== id || !_this2.open) return;
       const early = asked && asked.kind !== 'close' ? yield _this2.doNow(asked) : null;
       if (_this2.turn !== id || !_this2.open) return;
@@ -333,6 +334,78 @@ export class Chat {
 
   // "Look at my screen" in her chat: she looks (asking you first, the first time) and answers here,
   // the conversation so far in mind.
+  sendLook(text, id) {
+    var _this = this;
+    return _asyncToGenerator(function* () {
+      const tl = _this.brain.t.look;
+      const say = (line, face = 'aside') => {
+        if (_this.turn !== id) return;
+        _this.turn = 0;
+        _this.remember({
+          role: 'assistant',
+          content: line
+        });
+        _this.panel.stream(line, {
+          done: true
+        });
+        _this.panel.setFace(face);
+        _this.panel.setChatBusy(false);
+      };
+      if (!_this.look.asked) {
+        const where = yield _this.host.lookWhere().catch(() => ({}));
+        _this.history.pop(); // your message comes back once you've said yes
+        say(`${tl.ask} ${fmt(where.local ? tl.local : tl.online, {
+          model: where.model || '…',
+          service: where.provider || ''
+        })}`, 'look');
+        _this.panel.setActions([{
+          id: 'yes',
+          label: tl.yes,
+          primary: true
+        }, {
+          id: 'no',
+          label: tl.no
+        }], _asyncToGenerator(function* (choice) {
+          _this.panel.setActions([]);
+          if (choice !== 'yes') {
+            _this.interject(tl.declined, [], null);
+            return;
+          }
+          yield _this.host.setConfig({
+            lookAsked: true
+          });
+          _this.look.asked = true;
+          _this.send(text);
+        }));
+        return;
+      }
+      const snap = yield _this.host.lookSnap();
+      if (!snap.ok) return say(fmt(tl.failed, {
+        error: snap.error
+      }));
+      _this.look.effect();
+      const res = yield _this.host.lookSay({
+        id: snap.id,
+        persona: _this.lookPersona(),
+        history: _this.history.slice(-REMEMBER, -1),
+        prompt: `${text}\n\n(Note for you, never repeat it: the picture is the user's screen right now; a small figure with a big red mane on it is you. Answer about what you really see, in character. ${_this.languageNote()})`
+      });
+      if (!res.ok) {
+        const model = String(res.model || '…').replace(/:latest$/, '');
+        return say(res.code === 'novision' ? fmt(tl.noVision, {
+          model
+        }) : res.code === 'noai' ? tl.noAI : fmt(tl.failed, {
+          error: res.error || '…'
+        }));
+      }
+      const answer = clean(res.text).replace(/^["“«]\s*|\s*["”»]$/g, '') || '…';
+      _this.seen = {
+        text: answer,
+        at: Date.now()
+      };
+      return say(answer, mood(answer));
+    })();
+  }
   // an answer of hers, kept with your message before it
   remember(message) {
     this.history.push(message);
