@@ -182,8 +182,8 @@ export const RIVALS = {
 };
 // the one she watches is no rival of hers (Antigravity runs on Gemini)
 const OWN = {
-  claude: ['claude'],
-  codex: ['codex'],
+  claude: ['claude', 'codex'], // watched together (brain.mjs)
+  codex: ['codex', 'claude'],
   agy: ['gemini']
 };
 const NOTICE_AFTER = 4000; // in front this long: she notices

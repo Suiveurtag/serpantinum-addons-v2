@@ -32,7 +32,7 @@ await event('Stop',{last_assistant_message:'# Answer\n**Done**\n- item'});assert
 brain.onWindows({fg:'work'});assert.equal(panel.visible,false);
 const before=JSON.stringify(mission.day);await brain.handle({hook_event_name:'UserPromptSubmit',session_id:'demo',demo:true});await brain.handle({hook_event_name:'Stop',session_id:'demo',demo:true});assert.equal(JSON.stringify(mission.day),before);
 await event('SessionEnd');assert.equal(brain.sessions.has('codex:shared'),false);
-let rival='';brain.onRival=k=>rival=k;await brain.handle({hook_event_name:'PreToolUse',session_id:'claude-real'});assert.equal(rival,'claude');assert.equal(brain.sessions.has('claude-real'),false);
+let rival='';brain.onRival=k=>rival=k;await brain.handle({hook_event_name:'PreToolUse',session_id:'claude-real'});assert.equal(rival,'');assert.equal(brain.sessions.has('claude-real'),true);assert.equal(brain.name,'Claude');await brain.handle({hook_event_name:'PreToolUse',session_id:'agy:x'});assert.equal(rival,'gemini');assert.equal(brain.sessions.has('agy:x'),false);
 for(const lang of ['fr','en','es','pt','ru']) {
  for(const assistant of ['codex','agy']) {const t=linesFor(lang,assistant);assert.ok(t.report.title);const values=v=>typeof v==='string'?v:v&&typeof v==='object'?Object.values(v).map(values).join(' '):'';assert.ok(!/Claude|settings\.json|\.claude/.test(values(t)));}
 }

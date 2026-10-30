@@ -19,6 +19,8 @@ Scope {
     property var foregroundClient: null
     property var pointer: null
     property string cursorBuffer: ""
+    property var liveClients: []     // j/clients straight from Hyprland: its toplevel model keeps closed windows
+    property string clientBuffer: ""
     property int awayChecks: 0
     property string awayScreen: ""
     property var pc: null
@@ -42,15 +44,15 @@ Scope {
     function refresh() {
         if (!nativeAvailable) return;
         Hyprland.refreshMonitors();
-        Hyprland.refreshToplevels();
-        // The native models update asynchronously; collect on the next clock tick.
-        collect.restart();
+        // Snapshot once the window list has arrived (readClients).
+        if (!clientSocket.connected) clientSocket.connected = true;
     }
     function snapshot() {
         const monitors = nativeAvailable ? Hyprland.monitors.values : [];
         displays = World.monitors(Quickshell.screens, monitors);
-        clients = nativeAvailable ? Hyprland.toplevels.values.map(t => Object.assign({}, t.lastIpcObject,
-            { minimized: t.wayland ? t.wayland.minimized : false })) : [];
+        const minimized = {};
+        if (nativeAvailable) for (const t of Hyprland.toplevels.values) if (t.wayland && t.wayland.minimized) minimized["0x" + t.address.replace(/^0x/, "")] = true;
+        clients = nativeAvailable ? liveClients.map(c => Object.assign({}, c, { minimized: !!minimized[c.address] })) : [];
         foreground = Hyprland.activeToplevel ? "0x" + Hyprland.activeToplevel.address.replace(/^0x/, "") : "";
         foregroundClient = clients.find(c => c.address === foreground) || null;
         if (!displays.some(d => d.id === Capri.screenName)) {
@@ -158,8 +160,13 @@ Scope {
     }
     Connections { target: Quickshell; function onScreensChanged() { world.snapshot(); world.refresh(); } }
     Connections { target: engine; function onCapriChanged() { world.attach(); } }
-    Timer { id: collect; interval: 60; onTriggered: world.snapshot() }
-    Timer { interval: 250; repeat: true; running: world.nativeAvailable; onTriggered: world.refresh() }
+    // faster while she rides a window, so she keeps up with it (upstream polls every 150 ms)
+    Timer {
+        property int ticks: 0
+        interval: 60; repeat: true; running: world.nativeAvailable
+        // her stance is a JS field (no QML notification): checked on each tick
+        onTriggered: if (++ticks % 4 === 0 || (world.engine.capri && world.engine.capri.stance === "sit")) world.refresh()
+    }
     Timer { interval: 1000; repeat: true; running: world.pcEnabled; onTriggered: world.samplePc() }
     Timer { interval: 2000; repeat: true; running: !world.performanceMode; onTriggered: world.follow() }
     Timer { interval: 5000; repeat: true; running: true; onTriggered: world.savePosition() }
@@ -173,6 +180,26 @@ Scope {
             if (plug && world.pc) world.pc.device(plug, Date.now(), world.quiet());
         } }
         stderr: SplitParser { onRead: line => console.warn("Capri udev:", line) }
+    }
+
+    function readClients() {
+        try {
+            const list = JSON.parse(clientBuffer);
+            clientBuffer = "";
+            clientSocket.connected = false;
+            if (!Array.isArray(list)) return;
+            liveClients = list;
+            snapshot();
+        } catch (error) {} // The JSON may be split across reads.
+    }
+    Socket {
+        id: clientSocket
+        path: Hyprland.requestSocketPath
+        parser: SplitParser { splitMarker: ""; onRead: data => { world.clientBuffer += data; world.readClients(); } }
+        onConnectedChanged: {
+            if (connected) { world.clientBuffer = ""; write("j/clients"); flush(); }
+            else if (world.clientBuffer) world.readClients();
+        }
     }
 
     function readCursor() {

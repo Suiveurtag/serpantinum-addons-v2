@@ -48,7 +48,7 @@ async function chat(cfg, {
     });
     args.splice(args.indexOf('-C'), 0, '-i', file);
   });
-  if (cfg.codexModel) args.push('-m', cfg.codexModel);
+  args.push('-m', cfg.codexModel || 'gpt-5.6-luna');
   args.push('-');
   const history = messages.slice(1, -1).map(m => `${m.role === 'user' ? 'User' : 'Capri'}: ${m.content}`).join('\n');
   const prompt = `Conversation so far:\n${history}\n\nUser's new message:\n${messages.at(-1).content}`;

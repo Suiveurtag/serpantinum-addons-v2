@@ -86,8 +86,11 @@ Bluetooth colder paired motion, and Ethernet straighter transmissions. The old
 upstream Canvas lightning and its repaint timer are used for OFF only. Network
 controls and connection actions retain their existing implementation.
 
-`NightSwitch` keeps a conventional track/handle, with a finite ember ignition
-and extinction, keyboard support and accessibility state.
+`HalloweenCard` is a title card on the moon artwork: OFF, the moon is cold and
+grey; ON, it fills with blood over 1.6 s, mist and distant bats load (only while
+visible and animated) and a bat burst leaves the moon. `NightSwitch` is a moon
+phase: new moon OFF, waxing to a full ember moon ON, with keyboard support and
+accessibility state.
 
 Loaders destroy effects when OFF or their panel is hidden. Settings mist is
 also gated by the current tab, and its shader unloads after the exit fade.

@@ -10,7 +10,7 @@ Item {
     height: 28
     x: Math.max(14, Math.min(engine.width - width - 14, brain.head.x - width / 2))
     y: Math.max(14, brain.head.top - height - 10)
-    visible: !!brain.ticker && !brain.message && !brain.suspended && !brain.dnd
+    visible: !!brain.ticker && !brain.message && !brain.suspended // silent work cue: kept under DND
     CapriPlate {
         anchors.fill: parent
         fillColor: "#7d3af5"

@@ -9,6 +9,7 @@ import shutil
 import stat
 import tempfile
 import capri
+import clawd
 import seasonal
 import seasonal_surfaces
 import wallpaper_engine
@@ -71,7 +72,13 @@ def patch_guide(text):
                     raise ValueError('Guide tabs model anchor changed')
                 match = matches[0]
                 text = text[:match.start()] + block + match.group(0) + text[match.end():]
-        old = '                return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
+        # Added after the first release, so existing tab blocks gain it on reinstall.
+        keybinds_entry = '        { id: "Keybinds", key: "addon_keybinds", name: "Keybinds", icon: "󰌌", file: "AddonKeybindsTab.qml", iconOffsetX: 0 },'
+        startup_entry = '        { id: "Startup", key: "addon_startup", name: "Startup", icon: "󰐥", file: "AddonStartupTab.qml", iconOffsetX: 0 },'
+        if startup_entry not in text:
+            if text.count(keybinds_entry) != 1: raise ValueError('Guide keybinds tab anchor changed')
+            text = text.replace(keybinds_entry, keybinds_entry + '\n' + startup_entry, 1)
+        old ='                return I18n.t("guide.tabs." + (t.key || t.id).toLowerCase(), t.name || t.id);'
         new = '''                let key = "guide.tabs." + (t.key || t.id).toLowerCase();
                 let label = I18n.t(key);
                 return label && label !== key ? label : (t.name || t.id);'''
@@ -912,7 +919,7 @@ def patch_inline_settings_keybind(text):
     return text.rstrip() + '\n\n' + marker + '\n' + 'hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd(' + json.dumps(command) + '))\n-- END serpantinum-addons-v2 inline settings\n'
 
 
-def install(without_halloween=False, without_capri=False):
+def install(without_halloween=False, without_capri=False, without_clawd=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
     theme_state = QS/'guide/theme/ThemeTabState.qml'
     theme_view = QS/'guide/theme/ThemeTab.qml'
@@ -936,7 +943,11 @@ def install(without_halloween=False, without_capri=False):
         text = pending[path] if path in pending else path.read_text()
         pending[path] = capri.remove(text) if without_capri else transform(text)
     pending[keybind_path] = capri.remove(pending[keybind_path]) if without_capri else capri.patch_keybind(pending[keybind_path], QS/'Shell.qml')
-    payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonsMouseTab.qml': 'guide/AddonsMouseTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
+    for path, transform in clawd.transformations(QS).items():
+        text = pending[path] if path in pending else path.read_text()
+        pending[path] = clawd.remove(text) if without_clawd else transform(text)
+    pending[keybind_path] = clawd.remove(pending[keybind_path]) if without_clawd else clawd.patch_keybind(pending[keybind_path], QS/'Shell.qml')
+    payloads = {'AddonAwake.qml': 'AddonAwake.qml', 'AddonDesktopDraw.qml': 'AddonDesktopDraw.qml', 'AddonDesktopZoom.qml': 'AddonDesktopZoom.qml', 'AddonMouseSpotlight.qml': 'AddonMouseSpotlight.qml', 'AddonColorPicker.qml': 'AddonColorPicker.qml', 'AddonsTab.qml': 'guide/AddonsTab.qml', 'AddonsMouseTab.qml': 'guide/AddonsMouseTab.qml', 'AddonMonitorsTab.qml': 'guide/AddonMonitorsTab.qml', 'AddonKeybindsTab.qml': 'guide/AddonKeybindsTab.qml', 'AddonStartupTab.qml': 'guide/AddonStartupTab.qml', 'DnsControl.qml': 'network/DnsControl.qml', 'LegacyCalendar.qml': 'calendar/LegacyCalendar.qml', 'CalendarPopup.qml': 'calendar/CalendarPopup.qml'}
     for component in ('AddonCursorSettings', 'AddonCursorPreview', 'AddonCursorRole', 'AddonCursorTestArea'):
         payloads[component + '.qml'] = 'guide/' + component + '.qml'
     for source, target in payloads.items(): pending[QS/target] = (SOURCE/'payload'/source).read_text()
@@ -969,6 +980,8 @@ def install(without_halloween=False, without_capri=False):
         pending[QS/'guide/AddonsTab.qml'] = seasonal.remove(pending[QS/'guide/AddonsTab.qml'])
     if without_capri:
         pending[QS/'guide/AddonsTab.qml'] = capri.remove(pending[QS/'guide/AddonsTab.qml'])
+    if without_clawd:
+        pending[QS/'guide/AddonsTab.qml'] = clawd.remove(pending[QS/'guide/AddonsTab.qml'])
     # Both tabs use the same DNS component; identical payload with appropriate relative imports.
     pending[QS/'guide/DnsControl.qml'] = (SOURCE/'payload/DnsControl.qml').read_text()
     qmldir = QS/'qmldir'
@@ -1013,6 +1026,7 @@ def install(without_halloween=False, without_capri=False):
             if source == sprite: path = path.with_name(sprite_name)
             elif source.name == 'CapriPet.qml': blob = blob.replace(b'shaders/sprite.frag.qsb', ('shaders/' + sprite_name).encode())
         capri_resources.append((path, blob))
+    clawd_resources = clawd.resources(SOURCE/'payload/clawd', QS)
     bridge = HOME/'.local/lib/qt6/qml/Serpantinum/Wallpaper/libSerpantinumWallpaperplugin.so'
     if bridge.is_file():
         wallpaper_engine.prepare(pending, QS, DEPLOY, HOME/'.local')
@@ -1035,7 +1049,7 @@ def install(without_halloween=False, without_capri=False):
         with os.fdopen(fd, 'w') as f: f.write(text)
         os.replace(name, path); changed += 1
     # Binary shader packages are versioned beside readable GLSL sources.
-    for path, blob, remove in [(p, b, without_halloween) for p, b in resource_payloads] + [(p, b, without_capri) for p, b in capri_resources]:
+    for path, blob, remove in [(p, b, without_halloween) for p, b in resource_payloads] + [(p, b, without_capri) for p, b in capri_resources] + [(p, b, without_clawd) for p, b in clawd_resources]:
         if remove:
             if path.exists():
                 saved = backup/path.relative_to(QS); saved.parent.mkdir(parents=True, exist_ok=True)
@@ -1069,5 +1083,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--without-halloween', action='store_true', help='Remove the seasonal layer while retaining other v2 addons')
     parser.add_argument('--without-capri', action='store_true', help='Remove the Capri desktop pet while retaining other v2 addons')
+    parser.add_argument('--without-clawd', action='store_true', help='Remove the Clawd desktop pet while retaining other v2 addons')
     args = parser.parse_args()
-    install(without_halloween=args.without_halloween, without_capri=args.without_capri)
+    install(without_halloween=args.without_halloween, without_capri=args.without_capri, without_clawd=args.without_clawd)

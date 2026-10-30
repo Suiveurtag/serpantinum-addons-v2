@@ -1,0 +1,86 @@
+{
+  "frame": {
+    "w": 21,
+    "h": 14
+  },
+  "animations": {
+    "idle": {
+      "file": "idle.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": true
+    },
+    "blink": {
+      "file": "blink.png",
+      "frames": 4,
+      "fps": 12,
+      "loop": false
+    },
+    "look_left": {
+      "file": "look_left.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": false
+    },
+    "look_right": {
+      "file": "look_right.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": false
+    },
+    "look_up": {
+      "file": "look_up.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": false
+    },
+    "walk": {
+      "file": "walk.png",
+      "frames": 4,
+      "fps": 8,
+      "loop": true
+    },
+    "turn": {
+      "file": "turn.png",
+      "frames": 2,
+      "fps": 12,
+      "loop": false
+    },
+    "sit": {
+      "file": "sit.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": true
+    },
+    "sleep": {
+      "file": "sleep.png",
+      "frames": 6,
+      "fps": 3,
+      "loop": true
+    },
+    "drag": {
+      "file": "drag.png",
+      "frames": 2,
+      "fps": 6,
+      "loop": true
+    },
+    "fall": {
+      "file": "fall.png",
+      "frames": 2,
+      "fps": 8,
+      "loop": true
+    },
+    "land": {
+      "file": "land.png",
+      "frames": 2,
+      "fps": 10,
+      "loop": false
+    },
+    "spawn": {
+      "file": "spawn.png",
+      "frames": 7,
+      "fps": 10,
+      "loop": false
+    }
+  }
+}

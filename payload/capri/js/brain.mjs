@@ -46,12 +46,13 @@ export class Brain {
     this.thinking = null; // { s, since, said, fidget, gazed } while Claude is quiet mid-task
   }
   get t() {
-    return linesFor(this.lang, this.assistant);
+    return linesFor(this.lang, this.speaker || this.assistant);
   }
 
   // the assistant she watches, as she calls it
   get name() {
-    return this.assistant === 'claude' ? 'Claude' : ASSISTANT_NAMES[this.assistant] || 'Claude';
+    const who = this.speaker || this.assistant;
+    return who === 'claude' ? 'Claude' : ASSISTANT_NAMES[who] || 'Claude';
   }
   session(evt) {
     const id = evt.session_id || 'default';
@@ -100,10 +101,13 @@ export class Brain {
     // Codex's and Antigravity's hooks mark their sessions (codex:..., agy:...): only the one she watches
     // counts. Another one at work is another AI in your life: she notices (bond.js).
     const source = /^(codex|agy):/.exec(String(evt.session_id || ''))?.[1] || 'claude';
-    if (!evt.demo && source !== this.assistant) {
+    // Claude Code and Codex are both watched together; only Antigravity stays exclusive
+    const pair = ['claude', 'codex'];
+    if (!evt.demo && source !== this.assistant && !(pair.includes(source) && pair.includes(this.assistant))) {
       this.onRival?.(source === 'agy' ? 'gemini' : source);
       return undefined;
     }
+    if (!evt.demo) this.speaker = source; // she names whichever one just spoke
     if (!this.watching && !evt.demo) return undefined; // not watching Claude Code: none of its business
     // the first real Claude Code event that ever reaches her (the demo's don't count)
     if (!this.linked && !evt.demo) {
