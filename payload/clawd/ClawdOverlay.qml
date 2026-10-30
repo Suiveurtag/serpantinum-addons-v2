@@ -22,6 +22,7 @@ PanelWindow {
     mask: Region {
         Region { item: hitBox.visible ? hitBox : null }
         Region { item: menu.visible ? menu : null }
+        Region { item: bubble.visible ? bubble : null }
     }
 
     ClawdSprite {
@@ -41,7 +42,7 @@ PanelWindow {
         MouseArea {
             id: hit
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             preventStealing: true
             cursorShape: pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             function at(mouse) {
@@ -55,8 +56,26 @@ PanelWindow {
         }
     }
 
+    // The petpet hand: a photo strip over Clawd, frame-locked to his petpet strips (same frame count, sprites.py).
+    Image {
+        readonly property var strip: Clawd.manifest && Clawd.manifest.hand || null
+        visible: !!strip && body.visible && overlay.pet.animation.startsWith("petpet")
+        x: body.x - 3 * Clawd.scale
+        y: body.y - 6 * Clawd.scale
+        width: 16 * Clawd.scale
+        height: strip ? Math.round(width * strip.h / strip.w) : 0
+        source: strip ? Qt.resolvedUrl("sprites/" + strip.file) : ""
+        sourceClipRect: strip ? Qt.rect(overlay.pet.frame % strip.frames * strip.w, 0, strip.w, strip.h) : Qt.rect(0, 0, 0, 0)
+    }
+
     // Region tracks only its item's own geometry, never a moving parent's, so mirror body here.
     Item { id: hitBox; x: body.x; y: body.y; width: body.width; height: body.height; visible: body.visible }
+
+    ClawdBubble {
+        id: bubble
+        anchor: body
+        visible: !!Clawd.bubble && overlay.petHere && !overlay.menuHere
+    }
 
     ClawdMenu {
         id: menu

@@ -81,11 +81,18 @@ ShellRoot {
                 test.expect(!Clawd.enabled, "keyboard toggle");
                 input.keyClick(Qt.Key_Space);
                 test.expect(Clawd.enabled, "keyboard toggle back");
+                const hook = test.find(settings, "clawdHook_claude");
+                test.expect(hook.enabled && hook.label === "[ ] claude", "hooks status loaded: " + hook.label);
+                test.click("clawdHook_claude");
+                test.expect(!hook.enabled && hook.label === "[…] claude", "connecting");
                 Config.setSetting("general.performance", true);
                 break;
             }
             case 3: test.expect(!card.animate, "performance mode stills the card"); Config.setSetting("general.performance", false); break;
-            case 4: test.expect(card.animate, "animates again"); viewport.contentY = 2000; settings.visible = false; break;
+            case 4:
+                test.expect(card.animate, "animates again");
+                test.expect(test.find(settings, "clawdHook_claude").label === "[x] claude" && card.hookNote === "start a new claude session", "claude connected");
+                test.expect(test.find(settings, "clawdHook_codex").label === "[ ] codex", "codex untouched"); viewport.contentY = 2000; settings.visible = false; break;
             case 5: test.expect(!card.animate, "hidden card stills"); console.log("CLAWD_PASS"); Qt.quit(); break;
             }
         }

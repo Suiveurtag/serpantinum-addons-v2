@@ -81,6 +81,54 @@
       "frames": 7,
       "fps": 10,
       "loop": false
+    },
+    "think": {
+      "file": "think.png",
+      "frames": 8,
+      "fps": 6,
+      "loop": false
+    },
+    "work": {
+      "file": "work.png",
+      "frames": 2,
+      "fps": 6,
+      "loop": true
+    },
+    "oops": {
+      "file": "oops.png",
+      "frames": 5,
+      "fps": 10,
+      "loop": false
+    },
+    "alert": {
+      "file": "alert.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": true
+    },
+    "happy": {
+      "file": "happy.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "petpet": {
+      "file": "petpet.png",
+      "frames": 7,
+      "fps": 20,
+      "loop": true
+    },
+    "petpetheart": {
+      "file": "petpetheart.png",
+      "frames": 7,
+      "fps": 20,
+      "loop": true
     }
+  },
+  "hand": {
+    "file": "hand.png",
+    "frames": 7,
+    "w": 158,
+    "h": 166
   }
 }

@@ -1,11 +1,13 @@
 """Clawd desktop pet hooks. Owns its mark so --without-capri never strips it."""
+import importlib.util
 import json
 import re
 import shlex
+from pathlib import Path
 
 MARK = 'serpantinum-clawd-v2'
 TYPES = ['singleton Clawd 1.0 clawd/Clawd.qml'] + [f'{name} 1.0 clawd/{name}.qml' for name in
-         ('AddonClawd', 'ClawdOverlay', 'ClawdPet', 'ClawdSprite', 'ClawdMenu', 'ClawdSettings', 'ClawdCard')]
+         ('AddonClawd', 'ClawdOverlay', 'ClawdPet', 'ClawdSprite', 'ClawdMenu', 'ClawdBubble', 'ClawdSettings', 'ClawdCard')]
 CHORD = 'SUPER + SHIFT + L'
 
 
@@ -52,3 +54,12 @@ def resources(payload, qs):
 
 def transformations(qs):
     return {qs/'qmldir': patch_qmldir, qs/'Shell.qml': patch_shell}
+
+
+def uninstall_hooks():
+    # Before any shell file changes: a hooks file we cannot rewrite stops the whole run.
+    spec = importlib.util.spec_from_file_location('clawd_hooks', Path(__file__).resolve().parent/'scripts/clawd/hooks.py')
+    hooks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hooks)
+    for agent in hooks.AGENTS:
+        hooks.configure(agent, install=False)

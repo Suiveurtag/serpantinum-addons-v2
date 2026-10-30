@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import "../"
 import "../reusables"
 
@@ -24,6 +25,8 @@ Rectangle {
     readonly property var naps: [1, 2, 3, 5, 10, 15, 20, 30, 45, 60]
     property bool cursorOn: true
     property bool summoned: false
+    property string hookNote: ""
+    property bool hookFailed: false
     function setScale(value) { Config.setSetting("addonsV2ClawdScale", Math.max(2, Math.min(8, Math.round(value)))); }
     function nap(step) {
         const v = Clawd.sleepMinutes;
@@ -262,6 +265,48 @@ Rectangle {
                 onActivated: card.rootObj.gotoTab("addon_keybinds")
             }
             T { visible: !card.compact; color: card.dim; text: "  search “clawd”" }
+        }
+        Line {
+            label: "hooks"
+            Repeater {
+                model: ["claude", "codex"]
+                Row {
+                    id: hook
+                    required property string modelData
+                    required property int index
+                    property var info: null    // hooks.py status, or {error}
+                    property bool busy: false  // Process.running only flips once the process has started
+                    function run(action) { busy = true; proc.command = ["python3", Clawd.scripts + "/hooks.py", action, modelData]; proc.running = true; }
+                    Component.onCompleted: run("status")
+                    Process {
+                        id: proc
+                        stdout: StdioCollector {
+                            onStreamFinished: {
+                                let r = null;
+                                try { r = JSON.parse(text); } catch (error) {}
+                                hook.busy = false;
+                                hook.info = r && r.ok ? r.data : { error: r && r.error || "hooks.py failed" };
+                                card.hookFailed = !!hook.info.error;
+                                card.hookNote = hook.info.error ? hook.modelData + ": " + hook.info.error : r.data.changed ? "start a new " + hook.modelData + " session" : card.hookNote;
+                            }
+                        }
+                    }
+                    T { visible: index > 0; text: " · "; color: card.faint }
+                    Key {
+                        objectName: "clawdHook_" + modelData
+                        label: (hook.busy || !hook.info ? "[…] " : hook.info.error ? "[!] " : hook.info.installed ? "[x] " : "[ ] ") + modelData
+                        accessibleName: modelData + " hooks"
+                        checkable: true; checked: !!hook.info && hook.info.installed === true
+                        enabled: !hook.busy && !!hook.info
+                        onActivated: hook.run(checked ? "uninstall" : "install")
+                    }
+                }
+            }
+            T {
+                visible: !card.compact || card.hookNote !== ""
+                color: card.hookFailed ? ThemeBackend.red : card.dim
+                text: "  ⎿ " + (card.hookNote || "he reacts to your agents")
+            }
         }
         Item { width: 1; height: card.lh * 0.5 }
         Frame {

@@ -921,6 +921,8 @@ def patch_inline_settings_keybind(text):
 
 def install(without_halloween=False, without_capri=False, without_clawd=False):
     # Calculate all transformations first. Never partly apply an unknown upstream revision.
+    if without_clawd:
+        clawd.uninstall_hooks()
     theme_state = QS/'guide/theme/ThemeTabState.qml'
     theme_view = QS/'guide/theme/ThemeTab.qml'
     patches = {QS/'Main.qml': lambda text: patch_inline_settings_main(patch_main(text)), QS/'WindowRegistry.js': patch_inline_settings_registry,QS/'Shell.qml': patch_shell, QS/'screenshot/ScreenshotOverlay.qml': patch_screenshot_overlay, QS/'quickactions/Floating.qml': patch_floating, QS/'guide/GuidePopup.qml': patch_guide, QS/'guide/GuideSidebar.qml': patch_guide_sidebar, QS/'guide/IdleTab.qml': patch_idle_tab, (theme_state if theme_state.exists() else theme_view): patch_theme, QS/'network/NetworkPopup.qml': patch_network, QS/'singletons/theme/Matugen.qml': patch_matugen, QS/'widgets/faces/weather/WeatherFaceFull.qml': patch_weather_face}

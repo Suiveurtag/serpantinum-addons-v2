@@ -5,7 +5,7 @@ import Quickshell.Hyprland
 import "../"
 
 // Clawd himself, in global logical pixels: x/y is his top-left corner, every ClawdOverlay draws him from here.
-// mode: spawn, idle, walk, turn, sit, sleep, drag, fall, land, play.
+// mode: spawn, idle, walk, turn, sit, sleep, drag, fall, land, play, work (an agent session is busy: Clawd.activity).
 Item {
     id: pet
     readonly property bool hypr: Hyprland.requestSocketPath !== ""
@@ -77,6 +77,7 @@ Item {
     function idle() {
         target = null;
         if (here && y < here.floor - height - 0.5) { vy = 0; enter("fall", "fall"); }
+        else if (Clawd.activity) { touch(); enter("work", Clawd.activity); }
         else if (tired) sleep();
         else enter("idle", "idle");
     }
@@ -163,10 +164,14 @@ Item {
         enter("play", name);
     }
 
+    // Middle click pets him; petting him again while he is being petted gets hearts.
+    function petpet() { perform(animation.startsWith("petpet") ? "petpetheart" : "petpet"); }
+
     // Input from the overlay where the press started, already in global coordinates.
     function press(button, gx, gy) {
         touch();
         if (button === Qt.RightButton) { openMenu(); return; }
+        if (button === Qt.MiddleButton) { petpet(); return; }
         grab = { x: gx, y: gy, dx: gx - x, dy: gy - y, moved: false };
     }
     function move(gx, gy) {
@@ -200,6 +205,10 @@ Item {
         vy = 0;
         enter("fall", "fall");
     }
+    // A session got busy, needs the user or went quiet: stop wandering (and wake) or go back to normal life.
+    function busy() {
+        if ((Clawd.activity || mode === "work") && ["idle", "sit", "sleep", "walk", "turn", "work"].indexOf(mode) >= 0) idle();
+    }
     function openMenu() {
         if (mode === "walk" || mode === "turn") idle();
         menuOpen = true;
@@ -212,7 +221,8 @@ Item {
 
     Connections {
         target: Clawd
-        function onCommand(name, arg) { if (name === "play") pet.perform(arg); }
+        function onCommand(name, arg) { if (name === "play" || name === "react") pet.perform(arg); }
+        function onActivityChanged() { pet.busy(); }
     }
 
     // The single clock for his frames; every overlay sprite shows clock.frame.

@@ -15,7 +15,18 @@ Scope {
         function play(name: string): string { return Clawd.play(name); }
     }
 
-    // OFF destroys every window, timer and socket.
+    // Hook ingress stays outside the Loader: Clawd OFF still tracks sessions. One JSON object per line.
+    SocketServer {
+        id: ingress
+        active: false
+        path: Caching.runDir + "/clawd.sock"
+        handler: Socket { parser: SplitParser { onRead: line => Clawd.ingest(line) } }
+    }
+    // On reload the old shell generation unlinks clawd.sock when it closes, after the new one bound it:
+    // listen only once the old generation is gone.
+    Timer { interval: 1500; running: !!Caching.runDir; onTriggered: ingress.active = true }
+
+    // OFF destroys every window, timer and the cursor socket.
     Loader {
         id: loader
         active: Clawd.enabled
