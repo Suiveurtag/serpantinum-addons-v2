@@ -10,7 +10,7 @@ SettingsRow {
     required rootObj
     property var viewport: null
     settingId: "addons_clawd"; searchTab: "addons"
-    searchKeywords: "clawd claude code pet mascot desktop companion compagnon mascotte pixel scale size taille speed vitesse sleep sommeil summon Super Shift L ipc call clawd toggle"
+    searchKeywords: "clawd claude code pet mascot desktop companion compagnon mascotte pixel scale size taille speed vitesse sleep sommeil summon windows fenêtres perch follow suivre cursor curseur screens écrans Super Shift L ipc call clawd toggle"
     title: "Clawd"; description: "Claude Code's pixel mascot on your desktop"; icon: "󰚩"; showIcon: false
     baseColor: "transparent"; hoverColor: "transparent"
     horizontalPadding: 0; verticalPadding: 0; spacing: 0; controlSpacing: 0

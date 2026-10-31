@@ -14,6 +14,8 @@ ShellRoot {
         function expect(c, msg) { if (!c) { console.error("CLAWD_FAIL", step, msg, p ? JSON.stringify({mode: p.mode, anim: p.animation, x: p.x, y: p.y, h: p.height, here: p.here}) : ""); Qt.exit(1); } }
         function wait(c, msg) { if (c) { waits = 0; return true; } if (++waits > 80) expect(false, "timeout: " + msg); step--; return false; }
         function floorY() { return p.here.floor - p.height; }
+        function fam(a) { return String(a).replace(/_2$/, ""); }
+        function raw(line) { Clawd.ingest(line); }
         function hook(agent, event, session, extra) { Clawd.ingest(JSON.stringify(Object.assign({ agent, event, session_id: session, dir: "proj" }, extra || {}))); }
         onTriggered: {
             switch (step++) {
@@ -29,7 +31,7 @@ ShellRoot {
                 break;
             case 1:
                 if (!wait(Clawd.instances === Quickshell.screens.length && Clawd.manifest && host.pet, "one overlay per screen")) break;
-                expect(Object.keys(Clawd.manifest.animations).length === 20 && Clawd.manifest.frame.w === 21, "manifest loaded");
+                expect(!!Clawd.manifest.animations.explode && Object.keys(Clawd.manifest.animations).length === 56 && Clawd.manifest.frame.w === 21, "manifest loaded");
                 expect(p.mode === "spawn" && Clawd.screenName === Quickshell.screens[0].name, "spawns on a screen");
                 expect(Math.abs(p.y - floorY()) < 1 && p.height === Clawd.manifest.frame.h * 4, "spawn on the floor at x4");
                 break;
@@ -114,33 +116,61 @@ ShellRoot {
                     Clawd.ingest(bad);
                 expect(Object.keys(Clawd.sessions).length === 0 && !Clawd.bubble, "bad lines ignored");
                 hook("claude", "PreToolUse", "s0");  // a turn already running when the shell started
-                expect(Clawd.activity === "work" && p.mode === "work" && p.animation === "work", "unknown session at work");
+                expect(Clawd.activity === "work" && p.mode === "work" && fam(p.animation) === "work", "unknown session at work");
                 hook("claude", "SessionEnd", "s0");
                 expect(p.mode === "idle", "back to normal life");
                 hook("claude", "UserPromptSubmit", "s1");
-                expect(Clawd.activity === "work" && p.mode === "play" && p.animation === "think", "prompt: think");
+                expect(Clawd.activity === "work" && p.mode === "play" && fam(p.animation) === "think", "prompt: think");
                 break;
             case 14:
-                if (!wait(p.mode === "work" && p.animation === "work", "think, then work")) break;
+                if (!wait(p.mode === "work" && fam(p.animation) === "work", "think, then work")) break;
                 p.walk(); p.idle();
                 expect(p.mode === "work", "no wandering while busy");
                 hook("claude", "PostToolUseFailure", "s1");
                 expect(p.animation === "oops", "failure: oops");
                 break;
             case 15:
-                if (!wait(p.mode === "work" && p.animation === "work", "oops, then work")) break;
+                if (!wait(p.mode === "work" && fam(p.animation) === "work", "oops, then work")) break;
+                for (const [tool, anim] of [["Read", "read"], ["Grep", "search"], ["exec_command", "bash"], ["WebSearch", "web"], ["Task", "task"],
+                                            ["update_plan", "todo"], ["mcp__x__y", "work"], ["Edit", "edit"], ["apply_patch", "edit"], ["Bash", "bash"]]) {
+                    hook("claude", "PreToolUse", "s1", { tool_name: tool });
+                    expect(Clawd.workAnim === anim && (p.animation === anim || p.animation === anim + "_2" && !!Clawd.manifest.animations[p.animation]), "tool " + tool + " -> " + anim + ": " + p.animation);
+                }
+                expect(Clawd.busyCount === 1, "one busy session");
+                hook("codex", "PreToolUse", "c9", { tool_name: "web_search", pids: [99999, "x", 1, 3.5] });
+                expect(Clawd.busyCount === 2 && fam(p.animation) === "web" && Clawd.lead.key === "codex:c9", "newest session leads: " + Clawd.busyCount);
+                expect(JSON.stringify(Clawd.sessions["codex:c9"].pids) === "[99999]", "pids sanitized");
+                Clawd.focus("codex:c9");  // no window owns 99999: nothing happens
+                hook("codex", "SessionEnd", "c9");
+                expect(Clawd.busyCount === 1 && fam(p.animation) === "bash", "back to the other session's tool");
+                p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.release(p.x + 5, p.y + 5);
+                expect(p.journalOpen && p.mode === "work", "click opens the journal without leaving work");
+                p.openMenu();
+                expect(!p.journalOpen, "menu closes the journal");
+                p.menuOpen = false;
+                hook("claude", "PreCompact", "s1");
+                expect(p.animation === "compact", "compaction squash");
+                break;
+            case 16:
+                if (!wait(p.mode === "work" && fam(p.animation) === "bash", "compact, then work")) break;
+                p.petpet();
+                expect(p.animation === "startled", "petted at work: startled");
+                hook("claude", "PreToolUse", "s1", { tool_name: "Edit" });
+                break;
+            case 17:
+                if (!wait(p.mode === "work" && fam(p.animation) === "edit", "startled, then edit")) break;
                 hook("claude", "Notification", "s1", { notification_type: "permission_prompt" });
                 expect(Clawd.activity === "alert" && p.animation === "alert" && Clawd.bubble.kind === "permission" && Clawd.bubble.text === "⚠ permission · proj", "permission alert");
                 hook("codex", "Notification", "c1", { notification_type: "agent_needs_input" });
                 expect(Clawd.bubble.kind === "permission", "waiting never hides a permission");
                 hook("claude", "PreToolUse", "s1");
-                expect(!Clawd.bubble && Clawd.activity === "work" && p.animation === "work", "approved: back to work");
+                expect(!Clawd.bubble && Clawd.activity === "work" && fam(p.animation) === "edit", "approved: back to work");
                 hook("claude", "Stop", "s1");
-                expect(Clawd.activity === "" && p.animation === "happy" && Clawd.bubble.text === "✓ terminé · proj", "stop: happy + bubble");
+                expect(Clawd.activity === "" && fam(p.animation) === "happy" && Clawd.bubble.text === "✓ done · proj", "stop: happy + bubble");
                 hook("claude", "PostToolUse", "s1");
                 expect(Clawd.activity === "", "a late async hook does not revive a stopped session");
                 break;
-            case 16:
+            case 18:
                 if (!wait(p.mode === "idle", "happy, then idle")) break;
                 hook("codex", "UserPromptSubmit", "c2");
                 hook("codex", "Notification", "c3", { notification_type: "permission_prompt" });
@@ -149,27 +179,247 @@ ShellRoot {
                 hook("codex", "Notification", "c3", { notification_type: "permission_prompt" });
                 Clawd.staleMs = 400;
                 break;
-            case 17:
+            case 19:
                 if (!wait(!Clawd.sessions["codex:c2"], "stale session purged")) break;
                 expect(Clawd.sessions["codex:c3"].phase === "alert" && Clawd.activity === "alert", "pending permission never purged");
                 Clawd.staleMs = 120000;
                 Config.setSetting("addonsV2Clawd", false);
                 break;
-            case 18:
+            case 20:
                 expect(Clawd.instances === 0 && !host.pet, "OFF unloads");
                 expect(Clawd.play("walk") === "off", "play OFF again");
                 expect(Clawd.activity === "alert", "OFF keeps tracking");
                 Config.setSetting("addonsV2Clawd", true);
                 break;
-            case 19:
+            case 21:
                 if (!wait(!!host.pet && host.pet.mode === "work" && host.pet.animation === "alert", "comes back showing the alert")) break;
                 hook("codex", "SessionEnd", "c3");
                 hook("codex", "SessionEnd", "c1");
                 expect(Clawd.activity === "" && !Clawd.bubble && Object.keys(Clawd.sessions).length === 0, "all sessions gone");
+                break;
+            case 22: {
+                if (!wait(Clawd.verbs.length > 1 && host.pet.mode === "idle", "verbs.py loaded")) break;
+                expect(Clawd.verbs.every(v => typeof v === "string" && v.length > 0 && v.length <= 40), "verbs are short strings");
+                // Status: stats only, an unknown session starts idle, never revives a phase
+                hook("claude", "Status", "st", { model: "Opus 5.5", effort: "high", ctx: 42, cost: 4.9, five_hour: 50, seven_day: 20 });
+                let st = Clawd.sessions["claude:st"];
+                expect(st && st.phase === "idle" && Clawd.activity === "" && p.mode === "idle", "status creates an idle session");
+                expect(st.model === "Opus 5.5" && st.effort === "high" && st.ctx === 42 && st.cost === 4.9 && st.five_hour === 50 && st.seven_day === 20, "stats stored");
+                raw('{"agent":"claude","event":"Status","session_id":"st","ctx":1e999,"cost":"9","five_hour":null,"model":7}');
+                st = Clawd.sessions["claude:st"];
+                expect(st.ctx === 42 && st.cost === 4.9 && st.five_hour === 50 && st.model === "Opus 5.5", "non-finite / wrong types ignored");
+                hook("claude", "UserPromptSubmit", "st");
+                hook("claude", "Stop", "st");
+                hook("claude", "Status", "st", { ctx: 50 });
+                expect(Clawd.sessions["claude:st"].phase === "idle" && Clawd.activity === "" && Clawd.sessions["claude:st"].ctx === 50, "status never revives a stopped session");
+                Clawd.dismiss();
+                hook("claude", "Status", "st", { cost: 5.1 });
+                expect(p.animation === "coin", "crossing $5: coin");
+                p.idle();
+                hook("claude", "Status", "st", { cost: 6 });
+                expect(p.animation === "idle", "same $5 band: nothing new");
+                hook("claude", "Status", "st", { five_hour: 100 });
+                expect(p.blasting && p.mode === "explode" && ["singularity", "nuke"].indexOf(p.blast.kind) >= 0, "5h limit reached: one of the limit scenes");
+                p.blastDone();
+                expect(p.dead && p.mode === "corpse" && Config.getSetting("addonsV2ClawdDead", 0) > 0 && p.y < p.here.y, "dead: his corpse falls from the top");
+                break;
+            }
+            case 23: {
+                if (!wait(p.mode === "dead" && p.animation === "dead", "his corpse lands and lies there")) break;
+                expect(Math.abs(p.y - floorY()) < 1, "on the floor");
+                p.perform("wave"); p.idle(); p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.move(p.x + 200, p.y - 200); p.release(); p.press(Qt.MiddleButton, p.x + 5, p.y + 5);
+                p.busy(); p.sleep(); p.perform("limit");
+                expect(p.mode === "dead" && p.animation === "dead" && !p.grab && !p.journalOpen && !p.blast && Math.abs(p.y - floorY()) < 1, "dead: he reacts to nothing");
+                const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
+                p.openMenu();
+                expect(p.menuOpen && ov.menu.rows[0] === "revive", "his menu offers revive");
+                p.menuOpen = false;
+                hook("claude", "SessionStart", "rv");
+                expect(p.mode === "revive" && p.dead && p.reviveAt > 0, "a new session starts his revival");
+                hook("claude", "SessionEnd", "rv");
+                break;
+            }
+            case 24: {
+                const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
+                if (!wait(ov.revival.visible && ov.revival.t > 1, "his overlay plays the revival")) break;
+                p.revived();
+                expect(p.mode === "idle" && !p.dead, "back to life");
+                break;
+            }
+            case 25:
+                expect(Number(Config.getSetting("addonsV2ClawdDead", 0)) === 0, "alive again");
+                p.idle();
+                const known = Clawd.sessions;
+                hook("claude", "Status", "st", { five_hour: 100 });
+                expect(p.animation === "idle" && Clawd.sessions === known, "already at the limit: no new reaction, no churn");
+                hook("claude", "Status", "st", { dir: "a\u202eb\u0007c" });
+                expect(Clawd.sessions["claude:st"].dir === "abc", "dir: control and bidi characters stripped");
+                hook("claude", "UserPromptSubmit", "sf");
+                hook("claude", "StopFailure", "sf");
+                expect(Clawd.sessions["claude:sf"].phase === "idle" && Clawd.activity === "" && p.animation === "sad", "StopFailure: sad");
+                expect(Clawd.bubble && Clawd.bubble.kind === "error" && Clawd.bubble.text === "✗ error · proj", "error bubble");
+                hook("claude", "SessionStart", "w1");
+                expect(p.animation === "wave" && !Clawd.sessions["claude:w1"], "session start: wave");
+                hook("claude", "UserPromptSubmit", "cp"); hook("claude", "PreCompact", "cp"); hook("claude", "SessionStart", "cp");
+                expect(p.animation === "compact" && !Clawd.sessions["claude:cp"].compacting, "restart after a compaction: no wave");
+                hook("claude", "SessionStart", "cp");
+                expect(p.animation === "wave", "a later start waves again");
+                hook("claude", "SessionEnd", "cp");
+                hook("claude", "UserPromptSubmit", "lt");
+                { const n = Object.assign({}, Clawd.sessions); n["claude:lt"] = Object.assign({}, n["claude:lt"], { since: Date.now() - 200000 }); Clawd.sessions = n; }
+                hook("claude", "Stop", "lt");
+                expect(p.animation === "celebrate", "long turn: celebrate");
+                hook("claude", "UserPromptSubmit", "sh");
+                hook("claude", "Stop", "sh");
+                expect(fam(p.animation) === "happy", "short turn: happy");
+                for (const k of ["st", "sf", "lt", "sh"]) hook("claude", "SessionEnd", k);
+                break;
+            case 26:
+                if (!wait(p.mode === "idle", "happy ends")) break;
+                Clawd.dismiss();
+                Clawd.dice = 0.1;  // < 0.5: variants, < 1/3: sweat
+                hook("claude", "UserPromptSubmit", "v");
+                expect(p.animation === "think_2" && Clawd.sessions["claude:v"].verb === Clawd.pick(Clawd.verbs), "think variant, verb rolled");
+                break;
+            case 27: {
+                if (!wait(p.mode === "work", "think, then work")) break;
+                expect(p.animation === "work_2", "work variant");
+                Clawd.dice = 0.9;
+                hook("claude", "PreToolUse", "v", { tool_name: "Edit", target: "main.py" });
+                expect(p.animation === "edit" && Clawd.lead.target === "main.py", "edit family, target stored");
+                Clawd.dice = 0.1;
+                hook("claude", "PreToolUse", "v", { tool_name: "Read", target: "notes.md\u0007x" });
+                expect(p.animation === "read_2" && Clawd.lead.target === "notes.mdx", "read variant, control chars stripped");
+                hook("claude", "PostToolUse", "v", { tool_name: "Read" });
+                expect(Clawd.lead.target === "notes.mdx", "post keeps the target");
+                Clawd.dice = 0.9;
+                p.shuffle(); expect(p.animation === "read", "shuffle: other variant");
+                p.shuffle(); expect(p.animation === "read_2", "shuffle back");
+                expect(!Clawd.strained && p.speed === 1, "not strained, medium speed");
+                hook("claude", "Status", "v", { ctx: 85, effort: "max" });
+                expect(Clawd.sessions["claude:v"].phase === "work" && Clawd.strained && p.speed === 1.5, "strained, max effort types faster: " + p.speed);
+                p.shuffle(); expect(p.animation === "read", "strained, roll 0.9: no sweat");
+                Clawd.dice = 0.1;
+                p.shuffle(); expect(p.animation === "sweat" && p.speed === 1, "strained, roll 0.1: sweat at normal speed");
+                p.shuffle(); expect(p.animation === "read_2", "never two sweats in a row");
+                hook("claude", "Status", "v", { effort: "low" });
+                expect(p.speed === 0.75, "low effort slower");
+                hook("claude", "Status", "v", { effort: "constructor" });
+                expect(p.speed === 1 && Clawd.effortRate("toString") === 1, "unknown effort: 1");
+                // thoughts: pure pieces
+                const lead = Clawd.lead, t0 = lead.since;
+                expect(Clawd.thinking && Clawd.thoughts === "full", "thinking while working");
+                expect(Clawd.elapsed(12000) === "12s" && Clawd.elapsed(65000) === "1m 05s" && Clawd.elapsed(3725000) === "1h 02m", "elapsed format");
+                let t = Clawd.thought("full", lead, t0 + 65000, null);
+                expect(t.text === lead.verb + "…" && t.suffix === " 1m 05s" && !t.warn, "verb line: " + JSON.stringify(t));
+                t = Clawd.thought("full", lead, t0, { text: "x".repeat(60), warn: true });
+                expect(t.text.length === 40 && t.text.endsWith("…") && t.warn && t.suffix === "", "override clipped to 40");
+                expect(Clawd.thought("verbs", lead, t0, { text: "Edit x" }).suffix === " 0s", "verbs mode ignores flashes and infos");
+                expect(Clawd.thought("off", lead, t0, null) === null && Clawd.thought("full", null, t0, null) === null, "off / no lead: nothing");
+                expect(Clawd.actionText(lead) === "Read notes.mdx" && Clawd.actionText({ tool: "Bash", target: "" }) === "Bash", "action text");
+                const infos = Clawd.infos(Object.assign({}, lead, { ctx: 42, five_hour: 63, seven_day: 20, cost: 1.237, model: "Opus 5.5" }));
+                expect(JSON.stringify(infos.map(i => i.text)) === JSON.stringify(["Opus 5.5 · constructor", "ctx 42%", "$1.24", "5h 63% · 7d 20%"]) && !infos.some(i => i.warn), "info list: " + JSON.stringify(infos));
+                expect(Clawd.nextInfo(lead, 0).text === "ctx 85%" && Clawd.nextInfo(lead, 1).warn, "warnings preferred");
+                expect(Clawd.nextInfo({ since: 0 }, 0) === null, "no stats: no info");
+                break;
+            }
+            case 28:
+                if (!wait(host.overlays[0].thought.visible, "thought shown")) break;
+                host.overlays[0].thought.extra = null;  // the Edit/Read flashes above
+                break;
+            case 29: {
+                const th = host.overlays[0].thought;
+                if (!wait(th.shown && th.shown.text === Clawd.lead.verb + "…" && th.line.suffix.length > 1, "verb line on screen")) break;
+                expect(th.glyph !== "" && th.width > 0 && th.y + th.height <= p.y - p.here.y + 1, "above his head");
+                th.flashAt = 0;
+                hook("claude", "PreToolUse", "v", { tool_name: "Grep", target: "TODO" });
+                expect(th.extra && th.extra.text === "Grep TODO" && th.line.text === "Grep TODO" && th.line.suffix === "", "action flash");
+                hook("claude", "PreToolUse", "v", { tool_name: "Bash", target: "npm" });
+                expect(th.extra.text === "Grep TODO", "flashes throttled");
+                th.extra = null; th.infoIndex = 0;
+                th.cycle();
+                expect(th.line.text === "ctx 85%" && th.line.warn, "info cycle shows the warning");
+                Config.setSetting("addonsV2ClawdThoughts", "verbs");
+                expect(th.visible && th.line.suffix !== "" && th.line.text === Clawd.lead.verb + "…", "verbs mode: verb only");
+                th.extra = null; th.flashAt = 0; th.cycle(); th.flash();
+                expect(th.extra === null, "verbs mode: no flash, no info");
+                Config.setSetting("addonsV2ClawdThoughts", "off");
+                expect(!Clawd.thinking && !th.visible, "off: hidden");
+                Config.setSetting("addonsV2ClawdThoughts", "full");
+                expect(th.visible, "full again");
+                hook("codex", "Notification", "x1", { notification_type: "agent_needs_input" });
+                expect(!th.visible, "a bubble hides the thought");
+                Clawd.dismiss();
+                expect(th.visible, "back after the bubble");
+                p.openMenu();
+                expect(!th.visible, "the menu hides the thought");
+                p.menuOpen = false;
+                hook("claude", "Stop", "v");
+                expect(!th.visible && !Clawd.thinking, "turn over: no thought");
+                Clawd.dice = null;
+                for (const k of ["v", "x1"]) { hook("claude", "SessionEnd", k); hook("codex", "SessionEnd", k); }
+                expect(Object.keys(Clawd.sessions).length === 0, "clean");
+                Clawd.dismiss();
+                // quota at 100 %: the singularity, once per window, never for a value first seen at 100
+                hook("claude", "Status", "q", { five_hour: 99, five_hour_resets: 1793000000 });
+                expect(!p.blasting, "below the limit");
+                hook("claude", "Status", "q", { five_hour: 100, five_hour_resets: 1793000000 });
+                expect(p.blasting && p.mode === "explode" && p.blast.screen === Clawd.screenName && p.blast.clock === 0, "limit reached: he freezes");
+                const frozen = p.frame;
+                p.perform("wave"); p.idle();
+                expect(p.mode === "explode" && p.frame === frozen && !p.clockRunning(), "nothing moves him while he is frozen");
+                break;
+            }
+            case 30: {
+                // his screen's window hides him, then starts the clock (no capture offscreen: after the fallback)
+                if (!wait(p.blastHidden && p.blast && p.blast.clock > 0, "the singularity window takes over")) break;
+                const w = host.blasts.find(b => b.screen.name === p.blast.screen);
+                expect(w && w.running && w.main && host.blasts.every(b => b.running), "every screen's window runs");
+                w.skip();
+                expect(Date.now() - p.blast.clock >= w.scene.at.back * 1000, "Escape skips to the end");
+                p.blastDone();
+                expect(!p.blast && !p.blasting && !p.blastHidden && p.mode === "corpse" && p.dead && host.blasts.every(b => !b.running), "his corpse after it");
+                p.revive(); p.revived();
+                expect(!p.dead && p.mode !== "revive", "revived");
+                hook("claude", "Status", "q", { five_hour: 99.5, five_hour_resets: 1793000000 });
+                hook("claude", "Status", "q", { five_hour: 100, five_hour_resets: 1793000000 });
+                expect(!p.blasting, "same window: once");
+                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: 1794000000 });
+                expect(!p.blasting, "first seen at 100: only primed");
+                hook("codex", "Status", "rate-limits", { seven_day: 3, seven_day_resets: 1794600000 });
+                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: 1794600000 });
+                expect(p.blasting, "a new window rearms it");
+                p.blastDone();
+                p.revive(); p.revived(); p.idle();
+                p.perform("nuke");
+                expect(p.blasting && p.blast.kind === "nuke", "the nuclear variant on demand");
+                break;
+            }
+            case 31: {
+                if (!wait(p.blastHidden && p.blast && p.blast.clock > 0, "the nuke window takes over")) break;
+                const w = host.blasts.find(b => b.screen.name === p.blast.screen);
+                expect(w.nuke && w.scene.legs.length === 6 && w.scene.groundX > 0, "its scene runs");
+                w.skip();
+                break;
+            }
+            case 32: {
+                if (!wait(!p.blast && p.dead, "his corpse after the nuke")) break;
+                // dead for more than 3 h: the next start revives him
+                Config.setSetting("addonsV2ClawdDead", Date.now() - 4 * 3600000);
+                hook("claude", "SessionEnd", "q"); hook("codex", "SessionEnd", "rate-limits");
                 Config.setSetting("addonsV2Clawd", false);
                 break;
-            case 20:
-                expect(Clawd.instances === 0, "OFF again");
+            }
+            case 33:
+                if (!wait(Clawd.instances === 0, "OFF again: " + Clawd.instances + " " + Clawd.enabled + " " + !!host.pet)) break;
+                Config.setSetting("addonsV2Clawd", true);
+                break;
+            case 34:
+                if (!wait(host.pet && host.pet.mode === "revive", "3 h later, a shell start revives him")) break;
+                Config.setSetting("addonsV2Clawd", false);
+                break;
+            case 35:
+                if (!wait(Clawd.instances === 0, "OFF again: " + Clawd.instances + " " + Clawd.enabled + " " + !!host.pet)) break;
                 console.log("CLAWD_PASS");
                 Qt.quit();
                 break;

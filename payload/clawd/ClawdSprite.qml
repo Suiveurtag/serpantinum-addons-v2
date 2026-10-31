@@ -7,6 +7,7 @@ Item {
     property string animation: "idle"
     property bool mirrored: false
     property bool reverse: false
+    property real speed: 1         // playback rate: the clip's fps times this
     property int pixelScale: Clawd.scale
     property bool running: true
     property int frame: 0
@@ -40,7 +41,7 @@ Item {
 
     Timer {
         id: ticker
-        interval: sprite.clip ? Math.max(16, Math.round(1000 / (sprite.clip.fps || 8))) : 125
+        interval: sprite.clip ? Math.max(16, Math.round(1000 / (sprite.clip.fps || 8) / (sprite.speed > 0 ? sprite.speed : 1))) : 125
         repeat: true
         running: sprite.running && sprite.visible && !!sprite.clip && !sprite.done && !(sprite.clip.loop && sprite.frames < 2)
         onTriggered: {

@@ -1,4 +1,5 @@
 """Clawd desktop pet hooks. Owns its mark so --without-capri never strips it."""
+import hashlib
 import importlib.util
 import json
 import re
@@ -7,7 +8,8 @@ from pathlib import Path
 
 MARK = 'serpantinum-clawd-v2'
 TYPES = ['singleton Clawd 1.0 clawd/Clawd.qml'] + [f'{name} 1.0 clawd/{name}.qml' for name in
-         ('AddonClawd', 'ClawdOverlay', 'ClawdPet', 'ClawdSprite', 'ClawdMenu', 'ClawdBubble', 'ClawdSettings', 'ClawdCard')]
+         ('AddonClawd', 'ClawdOverlay', 'ClawdPet', 'ClawdWorld', 'ClawdSprite', 'ClawdMenu', 'ClawdBubble', 'ClawdJournal', 'ClawdThought', 'ClawdSettings', 'ClawdCard',
+          'ClawdSingularity', 'ClawdBlast', 'ClawdNuke', 'ClawdRevive')]
 CHORD = 'SUPER + SHIFT + L'
 
 
@@ -49,7 +51,36 @@ def remove(text):
 
 
 def resources(payload, qs):
-    return [(qs/'clawd'/source.relative_to(payload), source.read_bytes()) for source in sorted(payload.rglob('*')) if source.is_file()]
+    # Qt caches GPU programs by URL across hot reloads: each shader package is installed under its content hash and
+    # every QML file using one is rewritten to it. A package that does not match its source stops the install.
+    shaders = payload/'shaders'
+    manifest = json.loads((shaders/'manifest.json').read_text())
+    names = {}
+    for source in sorted(shaders.glob('*.frag')):
+        package = shaders/(source.name + '.qsb')
+        record = {'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'package_sha256': hashlib.sha256(package.read_bytes()).hexdigest()}
+        if manifest.get(source.stem) != record:
+            raise ValueError(f'Clawd shader {source.stem} source/package mismatch; run python3 scripts/clawd/shaders.py')
+        names[package.name] = f"{source.stem}.{record['package_sha256'][:12]}.frag.qsb"
+    out = []
+    for source in sorted(payload.rglob('*')):
+        if not source.is_file():
+            continue
+        path, blob = qs/'clawd'/source.relative_to(payload), source.read_bytes()
+        if source.parent == shaders and source.name in names:
+            path = path.with_name(names[source.name])
+        elif source.suffix == '.qml':
+            for plain, hashed in names.items():
+                blob = blob.replace(f'shaders/{plain}'.encode(), f'shaders/{hashed}'.encode())
+        out.append((path, blob))
+    return out
+
+
+def stale_shaders(qs, everything=False):
+    # Superseded hashed packages (all of them when Clawd is removed), deleted by the installer after the new ones are in place.
+    shaders = qs/'clawd/shaders'
+    keep = set() if everything else {path.name for path, _ in resources(Path(__file__).resolve().parent/'payload/clawd', qs) if path.parent == shaders}
+    return sorted(p for p in shaders.glob('*.frag.qsb') if p.name not in keep) if shaders.is_dir() else []
 
 
 def transformations(qs):
@@ -63,3 +94,4 @@ def uninstall_hooks():
     spec.loader.exec_module(hooks)
     for agent in hooks.AGENTS:
         hooks.configure(agent, install=False)
+    hooks.statusline(install=False)

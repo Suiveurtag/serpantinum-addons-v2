@@ -123,7 +123,250 @@
       "frames": 7,
       "fps": 20,
       "loop": true
+    },
+    "read": {
+      "file": "read.png",
+      "frames": 5,
+      "fps": 4,
+      "loop": true
+    },
+    "bash": {
+      "file": "bash.png",
+      "frames": 5,
+      "fps": 5,
+      "loop": true
+    },
+    "search": {
+      "file": "search.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true
+    },
+    "web": {
+      "file": "web.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": true
+    },
+    "task": {
+      "file": "task.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": true
+    },
+    "todo": {
+      "file": "todo.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true
+    },
+    "compact": {
+      "file": "compact.png",
+      "frames": 7,
+      "fps": 8,
+      "loop": false
+    },
+    "startled": {
+      "file": "startled.png",
+      "frames": 8,
+      "fps": 6,
+      "loop": false
+    },
+    "edit": {
+      "file": "edit.png",
+      "frames": 8,
+      "fps": 5,
+      "loop": true
+    },
+    "edit_2": {
+      "file": "edit_2.png",
+      "frames": 6,
+      "fps": 5,
+      "loop": true
+    },
+    "work_2": {
+      "file": "work_2.png",
+      "frames": 4,
+      "fps": 8,
+      "loop": true
+    },
+    "read_2": {
+      "file": "read_2.png",
+      "frames": 6,
+      "fps": 4,
+      "loop": true
+    },
+    "bash_2": {
+      "file": "bash_2.png",
+      "frames": 6,
+      "fps": 5,
+      "loop": true
+    },
+    "search_2": {
+      "file": "search_2.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true
+    },
+    "web_2": {
+      "file": "web_2.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true
+    },
+    "task_2": {
+      "file": "task_2.png",
+      "frames": 6,
+      "fps": 6,
+      "loop": true
+    },
+    "todo_2": {
+      "file": "todo_2.png",
+      "frames": 5,
+      "fps": 3,
+      "loop": true
+    },
+    "think_2": {
+      "file": "think_2.png",
+      "frames": 8,
+      "fps": 6,
+      "loop": false
+    },
+    "happy_2": {
+      "file": "happy_2.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "celebrate": {
+      "file": "celebrate.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "sweat": {
+      "file": "sweat.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true
+    },
+    "coin": {
+      "file": "coin.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "sad": {
+      "file": "sad.png",
+      "frames": 5,
+      "fps": 4,
+      "loop": false
+    },
+    "wave": {
+      "file": "wave.png",
+      "frames": 8,
+      "fps": 8,
+      "loop": false
+    },
+    "explode": {
+      "file": "explode.png",
+      "frames": 12,
+      "fps": 10,
+      "loop": false
+    },
+    "perch": {
+      "file": "perch.png",
+      "frames": 6,
+      "fps": 2,
+      "loop": true,
+      "grip": [
+        10.5,
+        12
+      ]
+    },
+    "perch_look": {
+      "file": "perch_look.png",
+      "frames": 5,
+      "fps": 2,
+      "loop": false,
+      "grip": [
+        10.5,
+        12
+      ]
+    },
+    "hop": {
+      "file": "hop.png",
+      "frames": 8,
+      "fps": 12,
+      "loop": false
+    },
+    "stumble": {
+      "file": "stumble.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "teeter": {
+      "file": "teeter.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": true
+    },
+    "peek": {
+      "file": "peek.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true
+    },
+    "nuke": {
+      "file": "nuke.png",
+      "frames": 13,
+      "fps": 12,
+      "loop": false
+    },
+    "dead": {
+      "file": "dead.png",
+      "frames": 1,
+      "fps": 1,
+      "loop": true
+    },
+    "dead_land": {
+      "file": "dead_land.png",
+      "frames": 4,
+      "fps": 10,
+      "loop": false
+    },
+    "revive": {
+      "file": "revive.png",
+      "frames": 11,
+      "fps": 10,
+      "loop": false
+    },
+    "tada": {
+      "file": "tada.png",
+      "frames": 7,
+      "fps": 8,
+      "loop": false
     }
+  },
+  "antimatter": {
+    "file": "antimatter.png",
+    "frames": 12,
+    "w": 49,
+    "h": 49
+  },
+  "smoke": {
+    "file": "smoke.png",
+    "frames": 12,
+    "w": 15,
+    "h": 16,
+    "fps": 6
+  },
+  "mushroom": {
+    "file": "mushroom.png",
+    "frames": 28,
+    "w": 96,
+    "h": 96
   },
   "hand": {
     "file": "hand.png",

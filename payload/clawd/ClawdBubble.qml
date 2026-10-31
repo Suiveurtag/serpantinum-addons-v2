@@ -1,7 +1,7 @@
 import QtQuick
 import "../"
 
-// One terminal line in a ╭─╮ box above Clawd, themed like his Settings card. A click closes it.
+// One terminal line in a ╭─╮ box above Clawd, themed like his Settings card. A click raises that session's terminal and closes it.
 Item {
     id: bubble
     required property Item anchor
@@ -33,5 +33,5 @@ Item {
         textFormat: Text.PlainText
         text: bubble.text
     }
-    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Clawd.dismiss() }
+    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Clawd.focus(Clawd.bubble.key); Clawd.dismiss(); } }
 }

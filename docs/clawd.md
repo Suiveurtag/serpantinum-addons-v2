@@ -3,7 +3,7 @@
 Clawd is the Claude Code pixel mascot: a flat `#D97757` block with two black
 eyes, arm stubs and four short legs, drawn from PNG strips at an integer scale
 with no smoothing. He lives in Settings → Addons → General, in a terminal-style
-card. Off by default; OFF unloads every window, timer and the cursor socket. Only
+card. Off by default; OFF unloads every window, timer and Hyprland socket. Only
 the hook socket stays, so he knows what your agents are doing when he comes back.
 
 ## Controls
@@ -12,14 +12,15 @@ the hook socket stays, so he knows what your agents are doing when he comes back
 | --- | --- |
 | `Super+Shift+L` | Toggle Clawd (`addonsV2Clawd`). Search `clawd` in Keybinds to change it; the installer preserves edits |
 | Left drag | Pick him up; he follows the pointer, across monitors |
-| Release | Falls to the floor of the screen under the drop point, then lands |
-| Left click | Small reaction; wakes him up |
-| Middle click | Petpet: a hand pets him for ~3 s (`> <` eyes); middle click again while petted for `^ ^` eyes and hearts |
-| Right click | ASCII menu: `> sleep` / `> wake`, `> hide` (turns Clawd off), `> settings`. Escape or an outside click closes it |
+| Release | Falls onto whatever is under the drop point: a window top (he lands, then perches on it) or the floor of that screen |
+| Left click | Small reaction (none while working); wakes him up; opens / closes the sessions journal |
+| Middle click | Petpet: a hand pets him for ~3 s (`> <` eyes); middle click again while petted for `^ ^` eyes and hearts. While an agent works he only startles, then goes back to work |
+| Right click | ASCII menu: `> sleep` / `> wake` (`> revive` while he is dead), `> hide` (turns Clawd off), `> settings`. Escape or an outside click closes it |
 
 Left alone he walks along the bottom of his screen (above the bar's reserved
 area), blinks, looks toward the pointer, sits, and falls asleep after the
-configured idle delay. Shell performance mode cuts idle actions and stops
+configured idle delay. He also lives on your windows and follows the cursor to
+other screens (below). Shell performance mode cuts idle actions and stops
 pointer polling.
 
 IPC, target `clawd`:
@@ -29,40 +30,158 @@ quickshell -p ~/.local/share/serpantinum/src/quickshell/Shell.qml ipc call clawd
 quickshell -p … ipc call clawd appear   # not "show": the quickshell CLI reads it as `ipc show`
 quickshell -p … ipc call clawd hide
 quickshell -p … ipc call clawd play walk   # "ok", "unknown" or "off"
+quickshell -p … ipc call clawd state       # debug: JSON of his mode, support, windows and tracked sessions
 ```
 
 `play` accepts any animation name from `clawd.json` (`idle`, `blink`,
 `look_left`, `look_right`, `look_up`, `walk`, `turn`, `sit`, `sleep`, `drag`,
-`fall`, `land`, `spawn`, `think`, `work`, `oops`, `alert`, `happy`, `petpet`, `petpetheart`); loops play for about 3 s, then normal behaviour resumes.
+`fall`, `land`, `spawn`, `think`, `work`, `oops`, `alert`, `happy`, `petpet`, `petpetheart`,
+`read`, `bash`, `search`, `web`, `task`, `todo`, `compact`, `startled`, `edit`, `edit_2`, `work_2`, `read_2`,
+`bash_2`, `search_2`, `web_2`, `task_2`, `todo_2`, `think_2`, `happy_2`, `celebrate`, `sweat`, `coin`, `sad`, `wave`,
+`explode`, `perch`, `perch_look`, `hop`, `stumble`, `teeter`, `peek`, `nuke`, `dead`, `dead_land`, `revive`, `tada`; 56 in all); loops play
+for about 3 s, then normal behaviour resumes. Scenes: `play explode` previews the singularity (about 37 s), `play nuke` the nuclear
+variant (about 20 s), `play limit` either at random (Escape skips to the end; both leave him dead); `play revive` brings him back.
+Nothing else plays while he is dead.
+
+## Windows and screens
+
+With `windows` on (card row `world`, `addonsV2ClawdWorld`, default on), Clawd sees the
+Hyprland windows of the active workspaces (`j/clients` on Hyprland's socket, not
+`Hyprland.toplevels`, which keeps closed windows):
+
+- Window tops are ledges when the window is not maximized or fullscreen, is wider than him
+  plus 40 px and has room above it under the bar (in practice floating windows: tiled ones
+  start right under the bar). Each screen also has its floor.
+- Dropped above a window, or falling past one, he lands on it and perches (seated on its top
+  edge, legs dangling). He rides it when it moves, walks along the visible part of its top
+  (never into a window in front of it), teeters at its ends, then hops down or turns back.
+  When the window closes, moves to another workspace, gets covered or maximized, or jumps
+  away (more than 200 px at once, he is startled), he falls and lands with `oops`.
+- A quarter of his walks explore: a hop onto a window top close above him, a peek from
+  behind a window edge (he walks in until two thirds of him are hidden, looks out for
+  3–6 s, then walks out; moving the window makes him step out), or a walk toward the cursor.
+- Reactions, at most one every 5 s and six a minute, each with its own cooldown: a window
+  opening on his screen → he looks at it; a window closing within 300 px → `startled`; focus
+  moving to a window on his screen → a glance (only while idle, sitting or perched); switching
+  workspace on his screen while he is on the floor → `stumble` (on a window he just falls).
+  None while an agent works or asks for permission, while asleep, dragged or petted, or while
+  the menu is open.
+
+With `follow` on (`addonsV2ClawdFollow`, default on), when the cursor stays on another screen
+for two checks in a row (2 s apart) and he is idle, sitting or perched (no agent busy, menu and
+journal closed), he goes there: across the screen edge when the next screen's floor is
+within his height of his own, otherwise he walks off his edge and drops in from the top of
+the cursor's screen, near the cursor. Perched, he hops down first.
+
+Performance mode: no exploring, no following, windows refreshed on Hyprland events plus
+every 3 s instead of every 240 ms (60 ms while he rides a window), halved reaction budget; he
+still lands on windows after a drop and falls when they go away. While he sleeps the window
+list is refreshed on events only (every 3 s too when he sleeps on a window). With `windows`
+off he is back to the floor of his screen only.
+
+`ipc call clawd state` adds `support` (`null` = the floor, or `{kind: "win", id, dx}`), `cover`
+(the window rect he peeks from behind) and `world` (`wins`: windows on screen, `ledges`,
+`refreshes`: window snapshots taken).
 
 ## Claude Code and Codex
 
-The card's `hooks` row connects each agent (`[ ] claude · [ ] codex`). Nothing touches
+The card's `hooks` row connects each agent (`[ ] claude · [ ] codex · [ ] stats`, the last one is
+Claude's status line relay, below). Nothing touches
 `~/.claude/settings.json` or `~/.codex/hooks.json` before you click; Codex then asks
 you to trust the new hooks. The same thing from a terminal:
 
 ```sh
-python3 ~/.local/share/serpantinum-addons-v2/scripts/clawd/hooks.py <status|install|uninstall> <claude|codex>
+python3 ~/.local/share/serpantinum-addons-v2/scripts/clawd/hooks.py <status|install|uninstall> <claude|codex|statusline>
 ```
 
 It adds one group per event next to the existing ones (Capri's included), writes a
 `<file>.clawd-backup-<date>` before every change, and removes only commands running
 `clawd-hook.js`. The hook (`scripts/clawd/hooks/clawd-hook.js`, node) sends one JSON line
-`{agent, event, session_id, tool_name, notification_type, dir}` to
-`$XDG_RUNTIME_DIR/serpantinum/clawd.sock`. No prompts, tool inputs or replies. It always
-exits 0 within 500 ms and does nothing when the shell is not running.
+`{agent, event, session_id, tool_name, notification_type, dir, pids, target, model}` (`pids`: the hook's
+ancestor processes, used to find the terminal window) to
+`$XDG_RUNTIME_DIR/serpantinum/clawd.sock`. It always exits 0 within 500 ms and does nothing
+when the shell is not running.
+
+Privacy: no prompts, replies or full tool inputs ever leave the hook. `target` is a short
+label of the action (24 characters at most, control and bidi characters stripped, `PreToolUse` only):
+a file's base name for reads and edits, only the program name of a shell command (leading
+`VAR=value` assignments skipped, quoted values included; anything but a plain name such as `$(…)` gives
+nothing, so no arguments, paths or secrets), the search pattern, the
+host of a fetched URL, the web search query, a sub-agent's description, or `done/total` of a
+todo list. Patterns, queries and descriptions are truncated, not filtered: they show above his
+head in `full` thoughts mode, and stay in memory in the shell only (never written to disk).
 
 | Event | Clawd |
 | --- | --- |
-| Prompt submitted | `think`, then `work` (typing) in place while the turn runs |
-| Tool failed | `oops`, then back to `work` |
+| Prompt submitted | `think` or `think_2`, then his working loop in place while the turn runs; a new spinner verb |
+| Tool failed | `oops`, then back to work |
 | Permission request | `alert` (hops) + `⚠ permission · <dir>` until that session moves on |
-| Idle prompt / Codex asks a question | `… attend · <dir>` for 8 s |
-| Turn finished | `happy` + `✓ terminé · <dir>` for 8 s |
-| Session start | `spawn` |
+| Idle prompt / Codex asks a question | `… waiting · <dir>` for 8 s |
+| Turn finished | `happy` or `happy_2` + `✓ done · <dir>` for 8 s; `celebrate` (confetti) after a turn of 3 min or more |
+| Turn failed (Claude `StopFailure`: API error, limit…) | `sad` + `✗ error · <dir>` for 8 s |
+| Session start | `wave`, except when Claude restarts the session after a compaction (and the spinner verbs are re-read, at most every 30 s) |
+| Compaction (Claude) | `compact` (squashed flat) |
+| Stats (`Status`, see below): cost crosses a new multiple of $5 | `coin` |
+| Stats: a 5-hour or 7-day limit reaches 100 % | the singularity or the nuke, at random (below), then dead |
+
+While working he plays the loop of the last tool used by the lead session (the working
+session that moved last), picking at random between the loop and its `_2` variant each time
+the tool family changes, and switching variant every 8–12 s:
+
+| Tool | Loop |
+| --- | --- |
+| `Read`, `NotebookRead`, `view_image` | `read` (book) / `read_2` (scroll unrolling) |
+| `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `apply_patch` | `edit` (pencil on a notepad) / `edit_2` (sheet held up, diff lines) |
+| `Bash`, `BashOutput`, `KillShell`, `exec_command`, `write_stdin`, `shell`, `local_shell` | `bash` (terminal above his head) / `bash_2` (output scrolling) |
+| `Grep`, `Glob`, `LS`, `ToolSearch` | `search` (magnifier) / `search_2` (crouched, scanning the ground) |
+| `WebFetch`, `WebSearch`, `web_search` | `web` (globe) / `web_2` (antenna with signal waves) |
+| `Task`, `Agent`, `spawn_agent` | `task` (a mini Clawd) / `task_2` (two mini Clawds hopping) |
+| `TodoWrite`, `update_plan` | `todo` (checklist) / `todo_2` (ticking boxes) |
+| anything else (MCP…) | `work` (keyboard) / `work_2` (fast two-hand typing) |
+
+When the lead session is strained (context ≥ 80 % or 5-hour limit ≥ 90 %), each variant switch
+has a 1 in 3 chance to be a `sweat` break instead. The lead's reasoning effort sets his typing
+speed: low ×0.75, medium ×1, high ×1.25, xhigh and max ×1.5.
 
 Several sessions merge: alert beats work beats normal life. A session with no event for
-2 minutes is forgotten, except one waiting for a permission. Click a bubble to close it.
+2 minutes is forgotten, except one waiting for a permission. With two or more busy
+sessions a `[n]` counter shows beside his head.
+
+### Stats (Claude status line)
+
+The third toggle of the `hooks` row, `[ ] stats`, makes Claude Code's status line run
+`scripts/clawd/hooks/clawd-status.js` (`hooks.py <status|install|uninstall> statusline`).
+It relays one `Status` line per status refresh:
+`{agent: "claude", event: "Status", session_id, dir, pids, model, effort, ctx, cost, five_hour, seven_day, five_hour_resets}`
+(model display name, effort level, context used %, session cost in USD, 5-hour / 7-day usage %; numbers
+that are not finite are left out). If you already had a status line, its command is wrapped
+(`node clawd-status.js -- <your command>`): it still runs with the same input and its output is
+shown unchanged; disconnecting restores it exactly. Without one, Clawd's prints nothing, so no
+status line row appears. Status lines only update the stats of a session (an unknown session is
+created idle); they never change what he is doing.
+
+### Thoughts
+
+While the lead session works, one line floats above his head, Claude Code spinner style:
+`✻ Pondering… 1m 05s`. The glyph cycles `· ✢ ✳ ✶ ✻ ✽` in Clawd orange (a static `✻` in
+performance mode); the verb is one of Claude Code's own spinner verbs, re-rolled every ~30 s,
+and the elapsed time counts from the prompt. The verbs come from `scripts/clawd/verbs.py`,
+which reads the list out of the installed `claude` (Bun binary or npm `cli.js`), applies
+`spinnerVerbs` from `~/.claude/settings.json` (`append` / `replace`), and caches the result in
+`$XDG_CACHE_HOME/serpantinum-addons-v2/clawd-verbs.json`; a short generic list is used when
+Claude Code is not installed.
+
+In `full` mode the line also shows, for 2.5 s, what the lead session just started
+(`Edit main.py`, `Bash npm`, at most one flash every 5 s), and every 14 s, for 4 s, the next of
+`<model> · <effort>`, `ctx 42%`, `$1.24`, `5h 63% · 7d 20%` (with stats connected); strained values
+show in peach and are preferred. `verbs` shows the verb and time only; `off` hides the line.
+It never takes clicks, and hides while a bubble, the menu or the journal is open.
+
+Clicking a bubble raises that session's terminal (`hyprctl dispatch focuswindow pid:…`,
+the first of the hook's ancestors owning a window) and closes it. Left click on Clawd opens
+the sessions journal, newest first: `⚠/✻/✓ agent dir tool elapsed ctx%` (context only with stats connected); click a row to raise
+that terminal. Terminals behind tmux/screen cannot be found (the multiplexer server is not an
+ancestor): nothing happens.
 
 ## Settings card
 
@@ -74,10 +193,43 @@ Several sessions merge: alert beats work beats normal life. A session with no ev
 | Sleep after | `addonsV2ClawdSleep`, 1–60 minutes, default 5 |
 | Summon on this screen | Respawns him on the focused monitor (disabled while off) |
 | Shortcut | Opens Keybinds; search `clawd` there to change it |
-| Hooks | Connect / disconnect Claude Code and Codex |
+| Hooks | Connect / disconnect Claude Code and Codex hooks, and the Claude status line relay (`stats`) |
+| Thoughts | `addonsV2ClawdThoughts`: full (default), verbs, off |
+| World | `addonsV2ClawdWorld` (`windows`: perching, peeking, exploring, window reactions) and `addonsV2ClawdFollow` (`follow` the cursor to other screens), both default on |
 
 Settings are shared with the separate Settings process through `settings.json`,
 so the card works in the Settings app and in the integrated `Super+Shift+P` panel.
+
+## Animations
+
+51 strips. Besides the idle life (`idle`, `blink`, `look_*`, `walk`, `turn`, `sit`, `sleep`,
+`drag`, `fall`, `land`, `spawn`), petting (`petpet`, `petpetheart`, `startled`) and the working
+loops above:
+
+| Animation | fps / loop | When | Looks like |
+| --- | --- | --- | --- |
+| `think`, `think_2` | 6 / once | prompt submitted | ✻ thinking; chin tap, `?` then a cream spark |
+| `happy`, `happy_2` | 10 / once | turn finished | hop; jump and spin with arms up |
+| `celebrate` | 10 / once | turn of 3 min or more finished | big jump, cream and pink confetti |
+| `oops` | 10 / once | tool failed | shakes with a `!` beside his head |
+| `alert` | 6 / loop | permission request | hops with a `!` |
+| `compact` | 8 / once | compaction | squashed flat |
+| `sweat` | 4 / loop | strained lead session, now and then while working | sweat drop, wipes his brow, pants |
+| `coin` | 10 / once | session cost crosses a multiple of $5 | flips a cream coin and catches it |
+| `sad` | 4 / once | turn failed | sinks a row, eyes down, a small tear |
+| `wave` | 8 / once | session start | waves one arm |
+| `perch` | 2 / loop | resting on a window top | seated on the edge, legs dangling below it, slow kicks |
+| `perch_look` | 2 / once | perched, now and then; a window opens | same, eyes to one side |
+| `hop` | 12 / once | hopping onto or off a window | crouch, stretch, tuck, landing squash (the jump itself is a tween) |
+| `stumble` | 10 / once | workspace switched under him | trips forward, flails, rights himself |
+| `teeter` | 6 / loop | at the end of a window top | tilts over the edge, arms windmilling |
+| `peek` | 4 / loop | half hidden behind a window | eyes at the leading edge, blinks |
+
+An animation may have a `grip` in `clawd.json`: the point that touches the support, in frame
+pixels from the frame's top-left, unmirrored (`perch` and `perch_look`: the seat line
+`[10.5, 12]`, so his legs hang below the window edge). Without one it is the bottom centre
+(standing). Missing new animations fall back: `perch`/`perch_look` → `sit`, `hop` → `land`,
+`stumble` → `oops`, `teeter` → `idle`, `peek` → `look_right`.
 
 ## Sprites
 
@@ -89,7 +241,8 @@ python3 scripts/clawd/sprites.py --check  # exits 1 if committed outputs are sta
 ```
 
 Output is deterministic. Palette: transparent, body `#D97757`, eyes `#000000`,
-and cream `#F0EEE6` for small props (sleep "z", ✻, keyboard, "!"), pink `#EC5B86` for petpet hearts. Frames face right; left is mirrored
+cream `#F0EEE6` for small props (sleep "z", ✻, keyboard, "!", paper, coin, confetti, sweat drop),
+pink `#EC5B86` for petpet hearts, pencils, ticks and confetti. Frames face right; left is mirrored
 at runtime. `hand.png` (the petpet hand, 7 frames frame-locked to `petpet*`) is cut out of
 `scripts/clawd/hand-pet.gif`'s black background by the same script; its size is in `clawd.json` → `hand`.
 
@@ -98,7 +251,7 @@ at runtime. `hand.png` (the petpet hand, 7 frames frame-locked to `petpet*`) is 
 `python3 install.py` installs `payload/clawd/` to `quickshell/clawd/`, registers
 the types in the root `qmldir`, hosts `AddonClawd` in `Shell.qml` and adds the
 `Super+Shift+L` bind to `keybinds.lua`. `python3 install.py --without-clawd`
-removes only Clawd's files, blocks, bind and hooks (both agents), with dated backups;
+removes only Clawd's files, blocks, bind, hooks (both agents) and status line relay, with dated backups;
 other addons are untouched.
 
 ## Validation
@@ -115,5 +268,55 @@ other addons are untouched.
    Summon from Settings on another monitor.
 6. Turn Clawd off: `qs-addon-clawd` layers disappear (`hyprctl layers`).
 7. Connect Claude in the card, start a new session, send a prompt: think → work →
-   happy + bubble. Same for Codex (trust the hooks first). A permission prompt
-   makes him hop with `⚠ permission`.
+   happy + bubble, with `✻ <Verb>… 3s` above his head while he works. Same for Codex
+   (trust the hooks first). A permission prompt makes him hop with `⚠ permission`.
+8. Connect `stats`, start a new Claude session: the thought line cycles model, context, cost
+   and limits; the journal shows the context %. Disconnect: a previous status line comes back.
+9. Open a floating window, drop Clawd above it: he perches on it; move the window, he rides it;
+   close it: he falls and says `oops`. Move the cursor to the other screen for a few seconds:
+   he walks over. `ipc call clawd state` shows `support` and `world`.
+
+### The limit (quota at 100 %): the singularity or the nuke
+
+When a Claude Code or Codex 5-hour or 7-day limit goes from below 100 % to 100 %, Clawd goes singular or nuclear (at random), once per
+window (a new `resets_at` rearms it; a value first seen at 100 %, after a shell restart, does not). Claude needs the
+card's `stats` connection and a running session; Codex is polled every 30 s with `scripts/clawd/codex_limits.py`,
+which reads only the used % and reset time of the latest rate-limit snapshot in recent local session logs.
+
+About 37 s, on Clawd's screen, above everything (layer `qs-addon-clawd-blast`, Overlay); other screens darken,
+flash and come back with it. He freezes, then the screen does (a `ScreencopyView` capture taken while he is
+hidden); he glides to the middle, sucks the light out of the desktop while he heats up and trembles; silence, his
+eyes cross; antimatter annihilation (flash, negative impact frames, plasma shell, shock and equatorial rings, gamma
+rays, particle/antiparticle spiral tracks, his pixels flung out); a black hole swallows the desktop and the debris,
+collapses into a star that blinks out; 5 s of black; an energy pulse brings the live desktop back and his corpse falls in.
+The frozen screen takes clicks; Escape skips to the pulse. Apps keep running underneath.
+
+Storyboard: `animations/SINGULARITY.md` in the Clawd project. Drawn frame by frame: `explode` (12 poses: hovering,
+six charging stages, pure light, crossed eyes, three cracking open) and `antimatter` (12 frames, 49×49, the
+annihilation core), both from `scripts/clawd/frames`. The rest is `ClawdBlast.qml` (a pure function of time) and
+three shaders in `payload/clawd/shaders`: `desk.frag` (freeze tear, light drain, lit negative), `fx.frag` (light
+threads, halo, the annihilation, on his pixel grid) and `lens.frag` (shake, chromatic split, impact negatives,
+black hole lensing and infall, accretion disc, star, blackout, return pulse). After editing a `.frag`, run
+`scripts/clawd/shaders.py` (`qsb` from Qt Shader Tools); the installer refuses a package that does not match its
+source and installs each under its hash (Qt caches shaders by URL across reloads).
+
+The nuke, about 20 s, same window and capture: a red alarm pulses in from the edges while he panics, running back and
+forth at full tilt (frozen in terror once), the screen trembling; he stops near the middle, crouches and leaps; time
+dilates (grey, cold, a slow camera push toward him, two heartbeats) while he hangs in the air; his eyes cross, a white
+glint swells in his chest; four black-and-white impact frames; then the flash and a nuclear mushroom grows from the
+floor under him, drawn frame by frame (`mushroom`, 28 frames of 96×96: fireball, condensation ring, rolling cap
+cooling from white to dark red, embers, dissipation), glowing, with embers flung out, heat shimmer, a shock front,
+the shake and chromatic split of `lens.frag`, the desktop lit and scorched by it; ash drifts down, everything fades
+over the live desktop and his corpse falls where it went off. Storyboard: `animations/NUKE.md` in the Clawd project.
+`ClawdNuke.qml` + `shaders/nuke.frag`; poses `nuke` (13).
+
+### Dead, and revived
+
+After either scene Clawd is dead: grey, on his back with his legs in the air, crosses for eyes, smoke rising from him
+(`smoke`, 15×16, 12 frames). He no longer reacts to anything (agents, petting, dragging, the journal, the windows);
+his thought line and `[n]` are hidden, bubbles still show. Death is kept in Config (`addonsV2ClawdDead`, when he
+died) so a reload finds his corpse. He comes back with `> revive` in his menu, when a new Claude Code / Codex session
+starts (`SessionStart`, not a compaction), or when the shell starts (or Clawd is turned on) 3 hours or more after he
+died. The revival (about 9 s, `ClawdRevive.qml` + `shaders/revive.frag`, drawn by his overlay, click-through): the
+screen dims, a spotlight comes down on him, holy powder falls on the corpse, which floats up glowing and turns white,
+bursts back into his colours, drops down and goes ta-da (`tada`) with rays of light behind him.

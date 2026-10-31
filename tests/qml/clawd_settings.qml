@@ -74,6 +74,15 @@ ShellRoot {
                 test.realClick("clawdSummon"); test.click("clawdSummon");
                 test.expect(get("addonsV2ClawdSummon", 0) === 2, "summon increments");
                 test.click("clawdShortcut"); test.expect(test.wentTo === "addon_keybinds", "shortcut opens keybinds");
+                test.expect(Clawd.thoughts === "full" && test.find(settings, "clawdThoughts_full").selected, "thoughts default full");
+                test.realClick("clawdThoughts_verbs"); test.expect(get("addonsV2ClawdThoughts", "") === "verbs" && Clawd.thoughts === "verbs", "thoughts verbs");
+                test.click("clawdThoughts_off"); test.expect(Clawd.thoughts === "off" && test.find(settings, "clawdThoughts_off").selected && !test.find(settings, "clawdThoughts_full").selected, "thoughts off");
+                Config.setSetting("addonsV2ClawdThoughts", "bogus"); test.expect(Clawd.thoughts === "full", "unknown mode falls back to full");
+                test.click("clawdThoughts_full"); test.expect(get("addonsV2ClawdThoughts", "") === "full", "thoughts full");
+                test.expect(Clawd.world && Clawd.follow && test.find(settings, "clawdWorld").label === "[x] windows" && test.find(settings, "clawdFollow").label === "[x] follow", "world and follow default on");
+                test.realClick("clawdWorld"); test.expect(get("addonsV2ClawdWorld", true) === false && !Clawd.world && test.find(settings, "clawdWorld").label === "[ ] windows", "windows off");
+                test.click("clawdFollow"); test.expect(get("addonsV2ClawdFollow", true) === false && !Clawd.follow && Clawd.world === false, "follow off, independent");
+                test.click("clawdWorld"); test.click("clawdFollow"); test.expect(Clawd.world && Clawd.follow, "both back on");
                 break;
             case 2: {
                 const k = test.find(settings, "clawdEnable");
@@ -81,10 +90,12 @@ ShellRoot {
                 test.expect(!Clawd.enabled, "keyboard toggle");
                 input.keyClick(Qt.Key_Space);
                 test.expect(Clawd.enabled, "keyboard toggle back");
-                const hook = test.find(settings, "clawdHook_claude");
+                const hook = test.find(settings, "clawdHook_claude"), stats = test.find(settings, "clawdHook_statusline");
                 test.expect(hook.enabled && hook.label === "[ ] claude", "hooks status loaded: " + hook.label);
+                test.expect(stats.enabled && stats.label === "[ ] stats", "statusline status loaded: " + stats.label);
                 test.click("clawdHook_claude");
                 test.expect(!hook.enabled && hook.label === "[…] claude", "connecting");
+                test.expect(!stats.enabled && stats.label === "[ ] stats", "one settings.json change at a time");
                 Config.setSetting("general.performance", true);
                 break;
             }
@@ -92,8 +103,16 @@ ShellRoot {
             case 4:
                 test.expect(card.animate, "animates again");
                 test.expect(test.find(settings, "clawdHook_claude").label === "[x] claude" && card.hookNote === "start a new claude session", "claude connected");
-                test.expect(test.find(settings, "clawdHook_codex").label === "[ ] codex", "codex untouched"); viewport.contentY = 2000; settings.visible = false; break;
-            case 5: test.expect(!card.animate, "hidden card stills"); console.log("CLAWD_PASS"); Qt.quit(); break;
+                test.expect(test.find(settings, "clawdHook_codex").label === "[ ] codex", "codex untouched");
+                card.hookNote = "";
+                test.realClick("clawdHook_statusline");
+                test.expect(test.find(settings, "clawdHook_statusline").label === "[…] stats", "connecting stats");
+                break;
+            case 5:
+                test.expect(test.find(settings, "clawdHook_statusline").label === "[x] stats" && card.hookNote === "start a new claude session" && !card.hookFailed, "stats connected: " + card.hookNote);
+                test.expect(test.find(settings, "clawdHook_claude").label === "[x] claude", "hooks kept");
+                viewport.contentY = 2000; settings.visible = false; break;
+            case 6: test.expect(!card.animate, "hidden card stills"); console.log("CLAWD_PASS"); Qt.quit(); break;
             }
         }
     }

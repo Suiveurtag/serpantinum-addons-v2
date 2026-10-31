@@ -27,6 +27,7 @@ Rectangle {
     property bool summoned: false
     property string hookNote: ""
     property bool hookFailed: false
+    property int hookRuns: 0       // hooks.py runs in flight: they share ~/.claude/settings.json, one change at a time
     function setScale(value) { Config.setSetting("addonsV2ClawdScale", Math.max(2, Math.min(8, Math.round(value)))); }
     function nap(step) {
         const v = Clawd.sleepMinutes;
@@ -242,6 +243,26 @@ Rectangle {
             T { visible: !card.compact; color: card.dim; text: "   of quiet, then zZ" }
         }
         Line {
+            // windows: perches on them, peeks behind them, reacts to them; follow: goes to the cursor's screen
+            label: "world"
+            Key {
+                objectName: "clawdWorld"
+                label: (Clawd.world ? "[x]" : "[ ]") + " windows"
+                accessibleName: "Windows"
+                checkable: true; checked: Clawd.world
+                onActivated: Config.setSetting("addonsV2ClawdWorld", !Clawd.world)
+            }
+            T { text: " · "; color: card.faint }
+            Key {
+                objectName: "clawdFollow"
+                label: (Clawd.follow ? "[x]" : "[ ]") + " follow"
+                accessibleName: "Follow the cursor"
+                checkable: true; checked: Clawd.follow
+                onActivated: Config.setSetting("addonsV2ClawdFollow", !Clawd.follow)
+            }
+            T { visible: !card.compact; color: card.dim; text: "  ⎿ perches on windows, follows your cursor" }
+        }
+        Line {
             label: "summon"
             Key {
                 objectName: "clawdSummon"
@@ -269,14 +290,17 @@ Rectangle {
         Line {
             label: "hooks"
             Repeater {
-                model: ["claude", "codex"]
+                // statusline: Claude's status line relays model, context, cost and limits ("stats")
+                model: ["claude", "codex", "statusline"]
                 Row {
                     id: hook
                     required property string modelData
                     required property int index
+                    readonly property string name: modelData === "statusline" ? "stats" : modelData
+                    readonly property string agent: modelData === "codex" ? "codex" : "claude"
                     property var info: null    // hooks.py status, or {error}
                     property bool busy: false  // Process.running only flips once the process has started
-                    function run(action) { busy = true; proc.command = ["python3", Clawd.scripts + "/hooks.py", action, modelData]; proc.running = true; }
+                    function run(action) { busy = true; card.hookRuns++; proc.command = ["python3", Clawd.scripts + "/hooks.py", action, modelData]; proc.running = true; }
                     Component.onCompleted: run("status")
                     Process {
                         id: proc
@@ -285,28 +309,54 @@ Rectangle {
                                 let r = null;
                                 try { r = JSON.parse(text); } catch (error) {}
                                 hook.busy = false;
+                                card.hookRuns = Math.max(0, card.hookRuns - 1);
                                 hook.info = r && r.ok ? r.data : { error: r && r.error || "hooks.py failed" };
                                 card.hookFailed = !!hook.info.error;
-                                card.hookNote = hook.info.error ? hook.modelData + ": " + hook.info.error : r.data.changed ? "start a new " + hook.modelData + " session" : card.hookNote;
+                                card.hookNote = hook.info.error ? hook.name + ": " + hook.info.error : r.data.changed ? "start a new " + hook.agent + " session" : card.hookNote;
                             }
                         }
                     }
                     T { visible: index > 0; text: " · "; color: card.faint }
                     Key {
                         objectName: "clawdHook_" + modelData
-                        label: (hook.busy || !hook.info ? "[…] " : hook.info.error ? "[!] " : hook.info.installed ? "[x] " : "[ ] ") + modelData
-                        accessibleName: modelData + " hooks"
+                        label: (hook.busy || !hook.info ? "[…] " : hook.info.error ? "[!] " : hook.info.installed ? "[x] " : "[ ] ") + hook.name
+                        accessibleName: hook.modelData === "statusline" ? "Claude status line stats" : modelData + " hooks"
                         checkable: true; checked: !!hook.info && hook.info.installed === true
-                        enabled: !hook.busy && !!hook.info
+                        enabled: !hook.busy && !!hook.info && card.hookRuns === 0
                         onActivated: hook.run(checked ? "uninstall" : "install")
                     }
                 }
             }
             T {
-                visible: !card.compact || card.hookNote !== ""
+                visible: !card.compact
                 color: card.hookFailed ? ThemeBackend.red : card.dim
                 text: "  ⎿ " + (card.hookNote || "he reacts to your agents")
             }
+        }
+        // narrow card: three toggles fill the row, the note goes under them
+        T {
+            visible: card.compact && card.hookNote !== ""
+            x: 13 * card.cw; width: parent.width - x; height: card.lh; elide: Text.ElideRight
+            color: card.hookFailed ? ThemeBackend.red : card.dim
+            text: "⎿ " + card.hookNote
+        }
+        Line {
+            label: "thoughts"
+            Repeater {
+                model: ["full", "verbs", "off"]
+                Row {
+                    required property string modelData
+                    required property int index
+                    T { visible: index > 0; text: " · "; color: card.faint }
+                    Key {
+                        objectName: "clawdThoughts_" + modelData
+                        label: modelData
+                        selected: Clawd.thoughts === modelData
+                        onActivated: Config.setSetting("addonsV2ClawdThoughts", modelData)
+                    }
+                }
+            }
+            T { visible: !card.compact; color: card.dim; text: "  ⎿ above his head while claude works" }
         }
         Item { width: 1; height: card.lh * 0.5 }
         Frame {

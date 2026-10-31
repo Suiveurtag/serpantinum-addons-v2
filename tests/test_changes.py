@@ -110,15 +110,12 @@ class ChangeTests(unittest.TestCase):
         self.assertIn('text: popup.resolveTabTitle(', patched)
         self.assertIn('text: popup.resolveSubtabTitle(', patched)
 
-    def test_inline_settings_hooks_are_idempotent(self):
-        for file, patch in [('Main.qml', installer.patch_inline_settings_main), ('WindowRegistry.js', installer.patch_inline_settings_registry)]:
-            with self.subTest(file=file):
-                result = patch((installer.QS/file).read_text())
-                self.assertEqual(result, patch(result))
-        self.assertIn('comp: "guide/GuidePopup.qml"', installer.patch_inline_settings_registry((installer.QS/'WindowRegistry.js').read_text()))
-        keys = installer.patch_inline_settings_keybind('')
-        self.assertEqual(keys, installer.patch_inline_settings_keybind(keys))
-        self.assertIn('"SUPER + SHIFT + P"', keys)
+    def test_remove_obsolete_inline_settings(self):
+        for prefix in ('//', '--'):
+            original = f'before\n{prefix} BEGIN serpantinum-addons-v2 inline settings\nold\n{prefix} END serpantinum-addons-v2 inline settings\nafter\n'
+            cleaned = installer.remove_inline_settings(original, prefix)
+            self.assertEqual(cleaned, 'before\nafter\n')
+            self.assertEqual(cleaned, installer.remove_inline_settings(cleaned, prefix))
 
     def test_native_patches_do_not_change_on_reinstall(self):
         patches = {

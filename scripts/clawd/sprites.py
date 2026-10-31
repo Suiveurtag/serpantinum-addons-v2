@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """Build Clawd's sprite strips from the ASCII frames in scripts/clawd/frames/<anim>.txt.
-'.' transparent, '#' body, 'o' eyes, 'z' cream props (sleep z, ✻, keyboard, !), 'h' pink hearts; frames separated by a blank line.
+'.' transparent, '#' body, 'o' eyes, 'z' cream props (sleep z, ✻, keyboard, !, book, terminal, lens, globe, checklist, sheets, coin, confetti),
+'h' pink (hearts, pencil, diff marks, ticks, confetti); frames separated by a blank line.
+explode = the singularity poses (ClawdBlast.qml picks them by index): he heats up ('a' 'b' 'c' 'w'), crosses his eyes, then cracks
+open on the violet void 'v'. antimatter = the 49x49 annihilation core drawn over his last pose.
+nuke = the nuclear variant's poses (ClawdNuke.qml picks them by index): startled, panic run, terror, crouch, launch, slow-motion
+float, crossed eyes, the glint, black and white impact silhouettes ('r' red alarm, 'y' sweat). mushroom = the 96x96 cloud, frame by frame.
+After either: dead (grey 'g' corpse on his back) / dead_land (the thud, 'u' dust), smoke = 15x16 wisps drawn above the corpse
+('n' 'm' 's', translucent); revive = the revival poses (ClawdRevive.qml), from grey through holy white back to orange; tada ('q' gold).
 hand.png (the petpet hand, drawn over Clawd in sync with his frames) is cut out of scripts/clawd/hand-pet.gif.
+An animation may set a grip = its contact point with the support, in frame pixels from the frame's top-left, unmirrored
+(mirrored: W - gx). The pet places him at x = contactX - gx*scale, y = contactY - gy*scale; without one the manifest has no
+'grip' and the default is [W/2, H] (bottom centre: standing on the floor).
 Usage: sprites.py [--check]  (--check exits 1 when payload/clawd/sprites differs from the frames)"""
 import io
 import json
@@ -15,33 +25,56 @@ FRAMES = Path(__file__).resolve().parent/'frames'
 OUT = ROOT/'payload/clawd/sprites'
 W, H = 21, 14
 PALETTE = {'.': (0, 0, 0, 0), '#': (0xD9, 0x77, 0x57, 255), 'o': (0, 0, 0, 255), 'z': (0xF0, 0xEE, 0xE6, 255), 'h': (0xEC, 0x5B, 0x86, 255)}
-# name: (fps, loop); order is the manifest order
+# name: (fps, loop) or (fps, loop, (gx, gy)) with a grip (see above); order is the manifest order
 ANIMS = {
     'idle': (2, True), 'blink': (12, False), 'look_left': (2, False), 'look_right': (2, False),
     'look_up': (2, False), 'walk': (8, True), 'turn': (12, False), 'sit': (2, True), 'sleep': (3, True),
     'drag': (6, True), 'fall': (8, True), 'land': (10, False), 'spawn': (10, False),
     'think': (6, False), 'work': (6, True), 'oops': (10, False), 'alert': (6, True), 'happy': (10, False),
     'petpet': (20, True), 'petpetheart': (20, True),
+    # one working loop per tool family (Clawd.toolAnim), plus compaction and being disturbed at work
+    'read': (4, True), 'bash': (5, True), 'search': (3, True), 'web': (6, True), 'task': (6, True), 'todo': (3, True),
+    'compact': (8, False), 'startled': (6, False),
+    # lot 4: edit family, a second variant per working loop (Clawd picks F or F_2), moods driven by session stats
+    'edit': (5, True), 'edit_2': (5, True), 'work_2': (8, True), 'read_2': (4, True), 'bash_2': (5, True), 'search_2': (4, True),
+    'web_2': (4, True), 'task_2': (6, True), 'todo_2': (3, True), 'think_2': (6, False), 'happy_2': (10, False),
+    'celebrate': (10, False), 'sweat': (4, True), 'coin': (10, False), 'sad': (4, False), 'wave': (8, False),
+    # lot 5a: windows and ledges (perch grip = the seat line, his legs dangle below it), hopping, tripping, peeking out
+    'explode': (10, False), 'perch': (2, True, (10.5, 12)), 'perch_look': (2, False, (10.5, 12)), 'hop': (12, False), 'stumble': (10, False),
+    'teeter': (6, True), 'peek': (4, True),
+    # the limit: the nuclear variant's poses, then dead until revived
+    'nuke': (12, False), 'dead': (1, True), 'dead_land': (10, False), 'revive': (10, False), 'tada': (8, False),
 }
+BLAST = {**PALETTE, **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
+    'a': 'e8946c', 'b': 'f4b68e', 'c': 'fcddc2', 'w': 'ffffff', 'v': '6e3bff'}.items()}}
+ANTIMATTER = {'.': (0, 0, 0, 0), **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
+    'w': 'ffffff', 'c': 'a8f4ff', 'b': '38c8ff', 'v': '8b5cff', 'm': 'ff4fd8', 'd': '2b0f52', 'k': '06020c'}.items()}}
+LIMIT = {**BLAST, **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
+    'r': 'e5484d', 'y': '8fd3ff', 'g': '8c8782', 'd': '5c5854', 'u': 'b8b2aa', 'l': 'c9c4be', 'q': 'ffd56b'}.items()}}
+SMOKE = {'.': (0, 0, 0, 0), 'n': (0x5c, 0x58, 0x54, 200), 'm': (0x8c, 0x87, 0x82, 170), 's': (0xbe, 0xba, 0xb4, 140)}
+MUSHROOM = {'.': (0, 0, 0, 0), **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
+    'W': 'ffffff', 'Y': 'fff2b8', 'E': 'ffcf4d', 'O': 'ff9028', 'R': 'e0501c', 'D': '9e2c18', 'B': '5a2a1e',
+    'K': '3a2b27', 'G': '6e5f57', 'L': 'a8988c', 'C': 'e6ecf2'}.items()}}
+NEW = {'nuke', 'dead', 'dead_land', 'revive', 'tada'}
 HAND = Path(__file__).resolve().parent/'hand-pet.gif'
 HAND_SCALE = 3  # source frames are 474x498, Clawd shows the hand at most ~16 px x8
 
 
-def frames(name):
+def frames(name, w=W, h=H, palette=PALETTE):
     path = FRAMES/f'{name}.txt'
     blocks = [b.split('\n') for b in path.read_text().strip('\n').split('\n\n')]
     for i, rows in enumerate(blocks):
-        if len(rows) != H or any(len(r) != W for r in rows):
-            sys.exit(f'{path}: frame {i} is not {W}x{H}')
-        bad = set(''.join(rows)) - set(PALETTE)
+        if len(rows) != h or any(len(r) != w for r in rows):
+            sys.exit(f'{path}: frame {i} is not {w}x{h}')
+        bad = set(''.join(rows)) - set(palette)
         if bad:
             sys.exit(f'{path}: frame {i} uses unknown pixels {sorted(bad)}')
     return blocks
 
 
-def png(blocks):
-    img = Image.new('RGBA', (W * len(blocks), H))
-    img.putdata([PALETTE[c] for y in range(H) for i in range(len(blocks)) for c in blocks[i][y]])
+def png(blocks, w=W, h=H, palette=PALETTE):
+    img = Image.new('RGBA', (w * len(blocks), h))
+    img.putdata([palette[c] for y in range(h) for i in range(len(blocks)) for c in blocks[i][y]])
     buf = io.BytesIO()
     img.save(buf, 'PNG', optimize=False, compress_level=9)  # no metadata chunks: bytes depend only on pixels
     return buf.getvalue()
@@ -95,10 +128,22 @@ def hand():
 def build():
     files = {}
     manifest = {'frame': {'w': W, 'h': H}, 'animations': {}}
-    for name, (fps, loop) in ANIMS.items():
-        blocks = frames(name)
-        files[f'{name}.png'] = png(blocks)
+    for name, (fps, loop, *grip) in ANIMS.items():
+        palette = BLAST if name == 'explode' else LIMIT if name in NEW else PALETTE
+        blocks = frames(name, palette=palette)
+        files[f'{name}.png'] = png(blocks, palette=palette)
         manifest['animations'][name] = {'file': f'{name}.png', 'frames': len(blocks), 'fps': fps, 'loop': loop}
+        if grip:
+            manifest['animations'][name]['grip'] = list(grip[0])
+    core = frames('antimatter', 49, 49, ANTIMATTER)
+    files['antimatter.png'] = png(core, 49, 49, ANTIMATTER)
+    manifest['antimatter'] = {'file': 'antimatter.png', 'frames': len(core), 'w': 49, 'h': 49}
+    smoke = frames('smoke', 15, 16, SMOKE)
+    files['smoke.png'] = png(smoke, 15, 16, SMOKE)
+    manifest['smoke'] = {'file': 'smoke.png', 'frames': len(smoke), 'w': 15, 'h': 16, 'fps': 6}
+    cloud = frames('mushroom', 96, 96, MUSHROOM)
+    files['mushroom.png'] = png(cloud, 96, 96, MUSHROOM)
+    manifest['mushroom'] = {'file': 'mushroom.png', 'frames': len(cloud), 'w': 96, 'h': 96}
     files['hand.png'], manifest['hand'] = hand()
     files['clawd.json'] = (json.dumps(manifest, indent=2) + '\n').encode()
     return files

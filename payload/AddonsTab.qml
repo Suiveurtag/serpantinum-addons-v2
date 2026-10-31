@@ -33,6 +33,18 @@ Item {
             ClawdSettings { rootObj: root.rootObj; viewport: addonsViewport; Layout.bottomMargin: rootObj.s(6) }
             // END serpantinum-clawd-v2 option
             SettingsRow {
+                rootObj: root.rootObj; settingId: "addons_window_outline"; searchTab: "addons"; searchKeywords: "window outline border theme fenêtre contour bordure thème"
+                title: "Themed window outline"; description: "Add a fine outline to windows using the current shell palette."; icon: "󰖯"
+                Toggle {
+                    checked: Config.getSetting("addonsV2WindowOutline", false)
+                    accentColor: ThemeBackend.mauve
+                    onToggled: {
+                        Config.setSetting("addonsV2WindowOutline", checked);
+                        checked = Qt.binding(function() { return Config.getSetting("addonsV2WindowOutline", false); });
+                    }
+                }
+            }
+            SettingsRow {
                 rootObj: root.rootObj; settingId: "addons_weather_city_obfuscation"; searchTab: "addons"; searchKeywords: "weather city location privacy obfuscated météo ville localisation"
                 title: "Obfuscate weather location"; description: "Scramble the city name in the weather widget."; icon: "󰖟"
                 Toggle {
@@ -55,16 +67,6 @@ Item {
                     checked: Config.getSetting("addonsV2LegacyClock", false)
                     accentColor: ThemeBackend.mauve
                     onToggled: { Config.setSetting("addonsV2LegacyClock", checked); }
-                }
-            }
-            SettingsRow {
-                rootObj: root.rootObj; settingId: "addons_inline_settings"; searchTab: "addons"; searchKeywords: "settings inline legacy shell panel paramètres intégré ancien instant addonInlineSettings"
-                title: "Integrated settings panel"; description: "Super+Shift+P opens these settings inside the shell, as before 2.3. When off, it opens the app."; icon: "󰒓"
-                wrapText: true
-                Toggle {
-                    checked: Config.getSetting("addonsV2InlineSettings", false)
-                    accentColor: ThemeBackend.mauve
-                    onToggled: { Config.setSetting("addonsV2InlineSettings", checked); }
                 }
             }
             AddonGlassSurface {

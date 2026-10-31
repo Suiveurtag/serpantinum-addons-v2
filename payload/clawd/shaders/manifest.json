@@ -1,0 +1,22 @@
+{
+  "desk": {
+    "source_sha256": "c01a1e34072e08ccc93a74cfc29b26ebffbb925a6f20ba901cea765628dc60ea",
+    "package_sha256": "215c80c0c24166d11c00efe34a7b327f15c4e8bce3d2716ce5ed7341304a25b3"
+  },
+  "fx": {
+    "source_sha256": "0362b15ecb126f5a5e87f3ff34de0ba9908d7e85fddf604746ea3f4dbeaf2677",
+    "package_sha256": "0fa2bea4fcf78ba252314366603df1472259c63ae4fe759819c049076cccec70"
+  },
+  "lens": {
+    "source_sha256": "c93172be8f56397ba8a2d62185c0bf91ff3be33651dc13bbf6a8ed7ee0f8b5d5",
+    "package_sha256": "0cd06b6b1161a0b2f23af03988db7b430286e4b0bca7d2d4cf17d1445f979e2d"
+  },
+  "nuke": {
+    "source_sha256": "9ae212fae89f413b8418d7b6b0d8a3fa55d74e238bdca4a2a74c32017656ac97",
+    "package_sha256": "4aa78c8ecb38d1fff7611287d2a3f2cb6040da3de1e1e84eae705ccb8c34f06e"
+  },
+  "revive": {
+    "source_sha256": "54cab9f557ade893b98c77b3e54da7bd753c9cf962496eeb4f9128dcc734b788",
+    "package_sha256": "82c13ef792295b00b86ccb34e953876a5c8f570f4a809e439e915df8e7993f8d"
+  }
+}
