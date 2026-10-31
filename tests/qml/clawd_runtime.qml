@@ -7,6 +7,7 @@ ShellRoot {
 
     Timer {
         property int step: 0
+        property real carryFrom: 0
         property int waits: 0
         property real startX: 0
         property var p: host.pet
@@ -31,7 +32,7 @@ ShellRoot {
                 break;
             case 1:
                 if (!wait(Clawd.instances === Quickshell.screens.length && Clawd.manifest && host.pet, "one overlay per screen")) break;
-                expect(!!Clawd.manifest.animations.explode && Object.keys(Clawd.manifest.animations).length === 56 && Clawd.manifest.frame.w === 21, "manifest loaded");
+                expect(!!Clawd.manifest.animations.explode && Object.keys(Clawd.manifest.animations).length === 59 && Clawd.manifest.frame.w === 21, "manifest loaded");
                 expect(p.mode === "spawn" && Clawd.screenName === Quickshell.screens[0].name, "spawns on a screen");
                 expect(Math.abs(p.y - floorY()) < 1 && p.height === Clawd.manifest.frame.h * 4, "spawn on the floor at x4");
                 break;
@@ -227,9 +228,20 @@ ShellRoot {
             case 23: {
                 if (!wait(p.mode === "dead" && p.animation === "dead", "his corpse lands and lies there")) break;
                 expect(Math.abs(p.y - floorY()) < 1, "on the floor");
-                p.perform("wave"); p.idle(); p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.move(p.x + 200, p.y - 200); p.release(); p.press(Qt.MiddleButton, p.x + 5, p.y + 5);
+                p.perform("wave"); p.idle(); p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.release(); p.press(Qt.MiddleButton, p.x + 5, p.y + 5);
                 p.busy(); p.sleep(); p.perform("limit");
                 expect(p.mode === "dead" && p.animation === "dead" && !p.grab && !p.journalOpen && !p.blast && Math.abs(p.y - floorY()) < 1, "dead: he reacts to nothing");
+                // ...but his corpse can be carried: lifted, then it falls back to the floor where it was dropped
+                carryFrom = p.x;
+                p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.move(p.x + 105, p.y - 195);
+                expect(p.mode === "carried" && p.dead && p.animation === "dead" && p.x > carryFrom + 50 && p.y < floorY() - 100, "his corpse is carried");
+                p.release();
+                expect(p.mode === "corpse" && p.dead && !p.grab, "dropped: his corpse falls");
+                break;
+            }
+            case 24: {
+                if (!wait(p.mode === "dead", "his corpse lands where it was dropped")) break;
+                expect(p.dead && p.x > carryFrom + 50 && Math.abs(p.y - floorY()) < 1, "back on the floor, further along");
                 const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
                 p.openMenu();
                 expect(p.menuOpen && ov.menu.rows[0] === "revive", "his menu offers revive");
@@ -239,14 +251,14 @@ ShellRoot {
                 hook("claude", "SessionEnd", "rv");
                 break;
             }
-            case 24: {
+            case 25: {
                 const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
                 if (!wait(ov.revival.visible && ov.revival.t > 1, "his overlay plays the revival")) break;
                 p.revived();
                 expect(p.mode === "idle" && !p.dead, "back to life");
                 break;
             }
-            case 25:
+            case 26:
                 expect(Number(Config.getSetting("addonsV2ClawdDead", 0)) === 0, "alive again");
                 p.idle();
                 const known = Clawd.sessions;
@@ -274,14 +286,14 @@ ShellRoot {
                 expect(fam(p.animation) === "happy", "short turn: happy");
                 for (const k of ["st", "sf", "lt", "sh"]) hook("claude", "SessionEnd", k);
                 break;
-            case 26:
+            case 27:
                 if (!wait(p.mode === "idle", "happy ends")) break;
                 Clawd.dismiss();
                 Clawd.dice = 0.1;  // < 0.5: variants, < 1/3: sweat
                 hook("claude", "UserPromptSubmit", "v");
                 expect(p.animation === "think_2" && Clawd.sessions["claude:v"].verb === Clawd.pick(Clawd.verbs), "think variant, verb rolled");
                 break;
-            case 27: {
+            case 28: {
                 if (!wait(p.mode === "work", "think, then work")) break;
                 expect(p.animation === "work_2", "work variant");
                 Clawd.dice = 0.9;
@@ -323,11 +335,11 @@ ShellRoot {
                 expect(Clawd.nextInfo({ since: 0 }, 0) === null, "no stats: no info");
                 break;
             }
-            case 28:
+            case 29:
                 if (!wait(host.overlays[0].thought.visible, "thought shown")) break;
                 host.overlays[0].thought.extra = null;  // the Edit/Read flashes above
                 break;
-            case 29: {
+            case 30: {
                 const th = host.overlays[0].thought;
                 if (!wait(th.shown && th.shown.text === Clawd.lead.verb + "…" && th.line.suffix.length > 1, "verb line on screen")) break;
                 expect(th.glyph !== "" && th.width > 0 && th.y + th.height <= p.y - p.here.y + 1, "above his head");
@@ -360,17 +372,18 @@ ShellRoot {
                 for (const k of ["v", "x1"]) { hook("claude", "SessionEnd", k); hook("codex", "SessionEnd", k); }
                 expect(Object.keys(Clawd.sessions).length === 0, "clean");
                 Clawd.dismiss();
-                // quota at 100 %: the singularity, once per window, never for a value first seen at 100
+                Clawd.quotas = ({}); p.quotaQueue = [];
+                // Quotas trigger the matching scene once per window.
                 hook("claude", "Status", "q", { five_hour: 99, five_hour_resets: 1793000000 });
                 expect(!p.blasting, "below the limit");
                 hook("claude", "Status", "q", { five_hour: 100, five_hour_resets: 1793000000 });
-                expect(p.blasting && p.mode === "explode" && p.blast.screen === Clawd.screenName && p.blast.clock === 0, "limit reached: he freezes");
+                expect(p.blasting && p.blast.kind === "nuke" && p.mode === "explode" && p.blast.screen === Clawd.screenName && p.blast.clock === 0, "limit reached: he freezes");
                 const frozen = p.frame;
                 p.perform("wave"); p.idle();
                 expect(p.mode === "explode" && p.frame === frozen && !p.clockRunning(), "nothing moves him while he is frozen");
                 break;
             }
-            case 30: {
+            case 31: {
                 // his screen's window hides him, then starts the clock (no capture offscreen: after the fallback)
                 if (!wait(p.blastHidden && p.blast && p.blast.clock > 0, "the singularity window takes over")) break;
                 const w = host.blasts.find(b => b.screen.name === p.blast.screen);
@@ -381,28 +394,37 @@ ShellRoot {
                 expect(!p.blast && !p.blasting && !p.blastHidden && p.mode === "corpse" && p.dead && host.blasts.every(b => !b.running), "his corpse after it");
                 p.revive(); p.revived();
                 expect(!p.dead && p.mode !== "revive", "revived");
-                hook("claude", "Status", "q", { five_hour: 99.5, five_hour_resets: 1793000000 });
                 hook("claude", "Status", "q", { five_hour: 100, five_hour_resets: 1793000000 });
                 expect(!p.blasting, "same window: once");
-                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: 1794000000 });
-                expect(!p.blasting, "first seen at 100: only primed");
-                hook("codex", "Status", "rate-limits", { seven_day: 3, seven_day_resets: 1794600000 });
-                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: 1794600000 });
-                expect(p.blasting, "a new window rearms it");
+                const deadline = Date.now() / 1000 + 86400;
+                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: deadline });
+                expect(!p.blasting, "first observation at 100 does not replay a limit");
+                const freshQuotas = Object.assign({}, Clawd.quotas); delete freshQuotas["codex:seven_day"];
+                Clawd.quotas = freshQuotas; Clawd.observed = ({});
+                hook("codex", "Status", "rate-limits", { seven_day: 99, seven_day_resets: deadline });
+                Clawd.dice = 0.1;   // < 0.5: the singularity, else the surge
+                hook("codex", "Status", "rate-limits", { seven_day: 100, seven_day_resets: deadline });
+                expect(p.blasting && p.blast.kind === "singularity", "weekly transition starts explode");
+                Clawd.dice = null;
+                expect(Config.getSetting("addonsV2ClawdQuotas", {})["codex:seven_day"].fired, "limit is persisted");
                 p.blastDone();
                 p.revive(); p.revived(); p.idle();
+                Clawd.quotas = Config.getSetting("addonsV2ClawdQuotas", {}); Clawd.observed = ({});
+                hook("codex", "Status", "restarted", { seven_day: 99, seven_day_resets: deadline });
+                hook("codex", "Status", "restarted", { seven_day: 100, seven_day_resets: deadline });
+                expect(!p.blasting && p.quotaQueue.length === 0, "restart and stale sample do not replay a fired limit");
                 p.perform("nuke");
                 expect(p.blasting && p.blast.kind === "nuke", "the nuclear variant on demand");
                 break;
             }
-            case 31: {
+            case 32: {
                 if (!wait(p.blastHidden && p.blast && p.blast.clock > 0, "the nuke window takes over")) break;
                 const w = host.blasts.find(b => b.screen.name === p.blast.screen);
                 expect(w.nuke && w.scene.legs.length === 6 && w.scene.groundX > 0, "its scene runs");
                 w.skip();
                 break;
             }
-            case 32: {
+            case 33: {
                 if (!wait(!p.blast && p.dead, "his corpse after the nuke")) break;
                 // dead for more than 3 h: the next start revives him
                 Config.setSetting("addonsV2ClawdDead", Date.now() - 4 * 3600000);
@@ -410,15 +432,81 @@ ShellRoot {
                 Config.setSetting("addonsV2Clawd", false);
                 break;
             }
-            case 33:
+            case 34:
                 if (!wait(Clawd.instances === 0, "OFF again: " + Clawd.instances + " " + Clawd.enabled + " " + !!host.pet)) break;
                 Config.setSetting("addonsV2Clawd", true);
                 break;
-            case 34:
+            case 35:
                 if (!wait(host.pet && host.pet.mode === "revive", "3 h later, a shell start revives him")) break;
+                host.pet.revived();
+                break;
+            case 36:
+                // the 5 h window that had run out is back below 100: the dawn scene, once
+                if (!wait(!p.dead && p.mode === "idle" && p.grounded(), "alive and standing again")) break;
+                hook("claude", "Status", "q", { five_hour: 10, five_hour_resets: 1793018000 });
+                expect(p.mode === "recharge" && p.rechargeAt > 0 && p.animation === "idle", "the 5 h reset starts the recharge");
+                break;
+            case 37: {
+                const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
+                if (!wait(ov.recharge.visible && ov.recharge.t > 2.8, "his overlay plays the recharge")) break;
+                expect(ov.recharging && ov.recharge.level >= 1 && ov.recharge.pose.strip === "recharge" && !ov.recharge.manifest === false, "charging up");
+                p.openMenu(); p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.perform("wave");
+                expect(p.mode === "recharge" && !p.menuOpen && !p.grab, "nothing interrupts it");
+                p.rechargeAt = Date.now() - 11000;
+                break;
+            }
+            case 38:
+                if (!wait(p.mode !== "recharge", "the recharge ends")) break;
+                expect(p.mode === "idle" && !p.dead, "back to his life");
+                hook("claude", "Status", "q", { five_hour: 12, five_hour_resets: 1793018000 });
+                expect(p.mode !== "recharge", "once per reset");
+                // The weekly reset is silent; the symphony remains available for manual playback.
+                Clawd.quotas = ({}); p.quotaQueue = [];
+                hook("codex", "Status", "w", { seven_day: 100, seven_day_resets: Date.now() / 1000 - 1 });
+                hook("codex", "Status", "w", { seven_day: 4, seven_day_resets: Date.now() / 1000 + 604800 });
+                expect(p.mode !== "weekly" && p.quotaQueue.length === 0, "the weekly reset is silent");
+                p.perform("weekly");
+                expect(p.mode === "weekly" && p.weeklyAt > 0, "manual symphony starts");
+                p.weeklyAt = Date.now() - 10000;   // skip to the orchestra playing
+                break;
+            case 39: {
+                const ov = host.overlays.find(o => o.screen.name === Clawd.screenName);
+                if (!wait(ov.symphony.visible && ov.symphony.t > 9.5, "his overlay plays the symphony")) break;
+                expect(ov.symphonic && ov.symphony.level(0) > 0.9 && ov.symphony.pose >= 5 && !ov.symphony.homeVisible, "the orchestra plays under his baton");
+                p.openMenu(); p.press(Qt.LeftButton, p.x + 5, p.y + 5); p.perform("wave"); p.perform("recharge");
+                expect(p.mode === "weekly" && !p.menuOpen && !p.grab, "nothing interrupts it");
+                p.weeklyAt = Date.now() - 30000;
+                break;
+            }
+            case 40:
+                if (!wait(p.mode !== "weekly", "the symphony ends")) break;
+                expect(p.mode === "idle" && !p.dead, "back to his life");
+                // the superpowered weekly variant: nothing interrupts it, it ends in the middle of his screen
+                p.perform("surge");
+                expect(p.mode === "surge" && p.surgeAt > 0 && !p.blast, "the surge starts");
+                p.openMenu(); p.perform("wave");
+                expect(p.mode === "surge" && !p.menuOpen, "nothing interrupts the surge");
+                p.surged(p.here.x + p.here.w / 2);
+                expect(p.mode === "idle" && Math.abs(p.x + p.width / 2 - (p.here.x + p.here.w / 2)) <= 1, "the surge ends in the middle");
+                Clawd.quotas = { "claude:five_hour": { used: 100, resets: Date.now() / 1000 - 1, watched: true, consumed: false, fired: true } };
+                p.die();
+                Clawd.checkQuotaResets();
+                expect(p.mode === "revive" && p.quotaQueue.length === 1, "deadline queues reset while dead");
+                Clawd.checkQuotaResets();
+                expect(p.quotaQueue.length === 1, "deadline fires once");
+                p.revived(); p.runQuota();
+                expect(p.mode === "recharge" && p.quotaQueue.length === 0, "reset scene follows revival");
+                p.recharged();
+                hook("claude", "Status", "q", { five_hour: 1, five_hour_resets: Date.now() / 1000 + 18000 });
+                expect(p.mode !== "recharge", "new snapshot does not repeat a consumed deadline");
+                const nextDeadline = Date.now() / 1000 + 18000;
+                Clawd.quotas = { "claude:five_hour": { used: 99, resets: nextDeadline, fired: false, watched: true, consumed: false } };
+                Clawd.observed = ({});
+                hook("claude", "Status", "after-restart", { five_hour: 100, five_hour_resets: nextDeadline });
+                expect(!p.blasting && p.quotaQueue.length === 0, "first observation after restart cannot replay an unseen crossing");
                 Config.setSetting("addonsV2Clawd", false);
                 break;
-            case 35:
+            case 41:
                 if (!wait(Clawd.instances === 0, "OFF again: " + Clawd.instances + " " + Clawd.enabled + " " + !!host.pet)) break;
                 console.log("CLAWD_PASS");
                 Qt.quit();

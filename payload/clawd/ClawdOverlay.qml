@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import "../"
@@ -15,11 +16,17 @@ PanelWindow {
         && pet.y < here.y + here.h && pet.y + pet.height > here.y
     readonly property bool exploding: pet.blasting && petHere   // ClawdSingularity draws him meanwhile
     readonly property bool reviving: pet.mode === "revive" && Clawd.screenName === screen.name
+    readonly property bool recharging: pet.mode === "recharge" && Clawd.screenName === screen.name
+    readonly property bool symphonic: pet.mode === "weekly" && Clawd.screenName === screen.name
+    readonly property bool surging: pet.mode === "surge" && Clawd.screenName === screen.name
     readonly property alias thought: thought
     readonly property alias frameBox: frameBox
     readonly property alias viewport: viewport
     readonly property alias hitBox: hitBox
     readonly property alias revival: revival
+    readonly property alias recharge: recharge
+    readonly property alias symphony: symphony
+    readonly property alias surge: surge
     readonly property alias menu: menu
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
@@ -62,7 +69,7 @@ PanelWindow {
             x: -viewport.hideL
             width: implicitWidth
             height: implicitHeight
-            visible: !overlay.reviving   // ClawdRevive draws him meanwhile
+            visible: !overlay.reviving && !overlay.recharging && !overlay.symphonic && !overlay.surging   // the scenes draw him meanwhile
             animation: overlay.pet.animation
             mirrored: overlay.pet.mirrored
             reverse: overlay.pet.reverse
@@ -74,7 +81,7 @@ PanelWindow {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             preventStealing: true
-            cursorShape: overlay.pet.dead ? Qt.ArrowCursor : pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+            cursorShape: overlay.pet.dead && !pressed ? Qt.ArrowCursor : pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             function at(mouse) {
                 const p = mapToItem(overlay.contentItem, mouse.x, mouse.y);
                 return Qt.point(p.x + overlay.here.x, p.y + overlay.here.y);
@@ -132,20 +139,100 @@ PanelWindow {
         }
     }
 
+    // The 5 h limit coming back: same idea, he stands where he is; its end gives him back to his life.
+    ClawdRecharge {
+        id: recharge
+        anchors.fill: parent
+        visible: overlay.recharging && !!overlay.here
+        manifest: Clawd.manifest
+        pixel: Clawd.scale
+        ox: frameBox.x
+        oy: frameBox.y
+        FrameAnimation {
+            running: recharge.visible
+            onTriggered: {
+                recharge.t = (Date.now() - overlay.pet.rechargeAt) / 1000;
+                if (recharge.t >= recharge.at.end) overlay.pet.recharged();
+            }
+        }
+    }
+
+    // The weekly reset: a whole concert over the desktop, the curtains first; its end gives him back to his life.
+    ClawdSymphony {
+        id: symphony
+        anchors.fill: parent
+        visible: overlay.symphonic && !!overlay.here
+        manifest: Clawd.manifest
+        pixel: Clawd.scale
+        ox: frameBox.x
+        oy: frameBox.y
+        floorY: overlay.here ? overlay.here.floor - overlay.here.y : height
+        FrameAnimation {
+            running: symphony.visible
+            onTriggered: {
+                symphony.t = (Date.now() - overlay.pet.weeklyAt) / 1000;
+                if (symphony.t >= symphony.at.end) overlay.pet.weeklied();
+            }
+        }
+    }
+
+    // The weekly limit, superpowered: a capture of the desktop for the bulging corner, the workspace switch during his dash;
+    // its end leaves him in the middle of his screen, back on the workspace he left.
+    Loader {
+        id: surgeShot
+        active: overlay.surging && surge.t < surge.at.burst + 1.5
+        sourceComponent: ScreencopyView { x: -overlay.width * 2; width: overlay.width; height: overlay.height; captureSource: overlay.screen; live: false; paintCursor: false }
+    }
+    // The dash zoom: the compositor's own live zoom, parked on him (scripts/clawd/surge_zoom.py restores everything).
+    Process {
+        id: surgeZoom
+        command: ["python3", "-u", Quickshell.env("HOME") + "/.local/share/serpantinum-addons-v2/scripts/clawd/surge_zoom.py"]
+        running: overlay.surging && surge.t >= surge.at.dash - 0.5 && surge.t < surge.at.fast + 0.3
+        stdinEnabled: true
+        property bool ready: false
+        stdout: SplitParser { onRead: data => { if (data.indexOf("ready") >= 0) { surgeZoom.ready = true; surge.nativeZoom = true; } } }
+        onRunningChanged: if (!running) { ready = false; surge.nativeZoom = false; }
+    }
+    ClawdSurge {
+        id: surge
+        property bool away: false
+        anchors.fill: parent
+        visible: overlay.surging && !!overlay.here
+        manifest: Clawd.manifest
+        desk: surgeShot.item
+        verbs: Clawd.verbs
+        pixel: Clawd.scale
+        ox: frameBox.x
+        oy: frameBox.y
+        floorY: overlay.here ? overlay.here.floor - overlay.here.y : height
+        onVisibleChanged: { away = false; if (visible) seed = Math.random(); }
+        FrameAnimation {
+            running: surge.visible
+            onTriggered: {
+                surge.t = (Date.now() - overlay.pet.surgeAt) / 1000;
+                if (surgeZoom.ready && overlay.here)
+                    surgeZoom.write(JSON.stringify({ f: surge.zoomFactor, x: overlay.here.x + surge.me.x, y: overlay.here.y + surge.me.y }) + "\n");
+                if (!surge.away && surge.t >= surge.at.swap && surge.t < surge.at.back) { surge.away = true; overlay.pet.surgeWorkspace(true); }
+                if (surge.away && surge.t >= surge.at.back) { surge.away = false; overlay.pet.surgeWorkspace(false); }
+                if (surge.t >= surge.at.end) overlay.pet.surged(overlay.here.x + overlay.width / 2);
+            }
+        }
+    }
+
     // Region tracks only its item's own geometry, never a moving parent's, so mirror the viewport here.
     Item { id: hitBox; x: viewport.x; y: viewport.y; width: viewport.width; height: viewport.height; visible: viewport.visible }
 
     ClawdBubble {
         id: bubble
         anchor: frameBox
-        visible: !!Clawd.bubble && overlay.petHere && !overlay.menuHere && !overlay.journalHere && !overlay.exploding
+        visible: !!Clawd.bubble && overlay.petHere && !overlay.menuHere && !overlay.journalHere && !overlay.exploding && !overlay.surging
     }
 
     // Above his head while an agent works; deliberately not in the mask: clicks go through it.
     ClawdThought {
         id: thought
         anchor: frameBox
-        visible: Clawd.thinking && overlay.petHere && !bubble.visible && !overlay.menuHere && !overlay.journalHere && !overlay.exploding && !overlay.pet.dead
+        visible: Clawd.thinking && overlay.petHere && !bubble.visible && !overlay.menuHere && !overlay.journalHere && !overlay.exploding && !overlay.pet.dead && !overlay.recharging && !overlay.symphonic && !overlay.surging
     }
 
     ClawdJournal {
@@ -157,7 +244,7 @@ PanelWindow {
 
     // Several agents busy at once: how many, beside his head.
     Text {
-        visible: frameBox.visible && Clawd.busyCount >= 2 && !overlay.exploding && !overlay.pet.dead
+        visible: frameBox.visible && Clawd.busyCount >= 2 && !overlay.exploding && !overlay.pet.dead && !overlay.surging
         x: frameBox.x + frameBox.width - width
         y: frameBox.y + 2 * Clawd.scale - height / 2
         text: "[" + Clawd.busyCount + "]"

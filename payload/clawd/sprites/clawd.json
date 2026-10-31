@@ -347,6 +347,24 @@
       "frames": 7,
       "fps": 8,
       "loop": false
+    },
+    "recharge": {
+      "file": "recharge.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false
+    },
+    "conduct": {
+      "file": "conduct.png",
+      "frames": 16,
+      "fps": 8,
+      "loop": false
+    },
+    "surge": {
+      "file": "surge.png",
+      "frames": 22,
+      "fps": 10,
+      "loop": false
     }
   },
   "antimatter": {
@@ -361,6 +379,18 @@
     "w": 15,
     "h": 16,
     "fps": 6
+  },
+  "orchestra": {
+    "file": "orchestra.png",
+    "frames": 14,
+    "w": 15,
+    "h": 12
+  },
+  "clone": {
+    "file": "clone.png",
+    "frames": 38,
+    "w": 21,
+    "h": 14
   },
   "mushroom": {
     "file": "mushroom.png",

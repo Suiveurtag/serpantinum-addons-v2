@@ -27,7 +27,7 @@ ANIMATIONS = ['idle', 'blink', 'look_left', 'look_right', 'look_up', 'walk', 'tu
               'read', 'bash', 'search', 'web', 'task', 'todo', 'compact', 'startled',
               'edit', 'edit_2', 'work_2', 'read_2', 'bash_2', 'search_2', 'web_2', 'task_2', 'todo_2', 'think_2', 'happy_2',
               'celebrate', 'sweat', 'coin', 'sad', 'wave', 'explode',
-              'perch', 'perch_look', 'hop', 'stumble', 'teeter', 'peek', 'nuke', 'dead', 'dead_land', 'revive', 'tada']
+              'perch', 'perch_look', 'hop', 'stumble', 'teeter', 'peek', 'nuke', 'dead', 'dead_land', 'revive', 'tada', 'recharge', 'conduct', 'surge']
 HOOKS = ROOT/'scripts/clawd/hooks.py'
 HOOK = ROOT/'scripts/clawd/hooks/clawd-hook.js'
 STATUS = ROOT/'scripts/clawd/hooks/clawd-status.js'
@@ -40,8 +40,8 @@ PALETTE = {(0, 0, 0, 0), (0xD9, 0x77, 0x57, 255), (0, 0, 0, 255), (0xF0, 0xEE, 0
 BLAST = PALETTE | {(0xE8, 0x94, 0x6C, 255), (0xF4, 0xB6, 0x8E, 255), (0xFC, 0xDD, 0xC2, 255), (255, 255, 255, 255), (0x6E, 0x3B, 0xFF, 255)}
 # the limit's nuclear variant, his corpse and his revival: red alarm, sweat, greys, dust, gold
 LIMIT = BLAST | {(0xE5, 0x48, 0x4D, 255), (0x8F, 0xD3, 0xFF, 255), (0x8C, 0x87, 0x82, 255), (0x5C, 0x58, 0x54, 255), (0xB8, 0xB2, 0xAA, 255),
-                 (0xC9, 0xC4, 0xBE, 255), (0xFF, 0xD5, 0x6B, 255)}
-SHADERS = ['desk', 'fx', 'lens', 'nuke', 'revive']
+                 (0xC9, 0xC4, 0xBE, 255), (0xFF, 0xD5, 0x6B, 255), (0x8F, 0x4A, 0x38, 255), (0x7A, 0x4A, 0x30, 255)}
+SHADERS = ['bulge', 'clone', 'desk', 'fx', 'lens', 'nuke', 'revive', 'surge', 'symphony']
 COLORS = {'base': '#1e1e2e', 'mantle': '#181825', 'crust': '#11111b', 'text': '#cdd6f4', 'subtext0': '#a6adc8', 'subtext1': '#bac2de', 'surface0': '#313244',
           'surface1': '#45475a', 'surface2': '#585b70', 'overlay0': '#6c7086', 'overlay1': '#7f849c', 'overlay2': '#9399b2', 'blue': '#89b4fa', 'primary': '#89b4fa',
           'mauve': '#cba6f7', 'green': '#a6e3a1', 'red': '#f38ba8', 'pink': '#f5c2e7', 'yellow': '#f9e2af', 'peach': '#fab387'}
@@ -124,7 +124,7 @@ class ClawdInstallTests(unittest.TestCase):
         copied = clawd.resources(PAYLOAD, qs)
         files = sorted(p for p in PAYLOAD.rglob('*') if p.is_file())
         names = {str(p.relative_to(PAYLOAD)) for p in files}
-        expected = ({line.split()[-1].removeprefix('clawd/') for line in clawd.TYPES} | {'sprites/clawd.json'} | {f'sprites/{a}.png' for a in ANIMATIONS + ['hand', 'antimatter', 'smoke', 'mushroom']}
+        expected = ({line.split()[-1].removeprefix('clawd/') for line in clawd.TYPES} | {'sprites/clawd.json'} | {f'sprites/{a}.png' for a in ANIMATIONS + ['hand', 'antimatter', 'smoke', 'mushroom', 'orchestra', 'clone']}
                     | {'js/world.mjs', 'js/mind.mjs', 'shaders/manifest.json'} | {f'shaders/{n}.frag{q}' for n in SHADERS for q in ('', '.qsb')})
         self.assertEqual(names, expected)  # nothing stray gets installed
         self.assertEqual(len(copied), len(files))
@@ -136,7 +136,7 @@ class ClawdInstallTests(unittest.TestCase):
                 self.assertEqual((path.parent, blob), (qs/'clawd/shaders', source.read_bytes()))
             elif b'shaders/' not in source.read_bytes() or source.suffix != '.qml':
                 self.assertEqual((path, blob), (qs/'clawd'/source.relative_to(PAYLOAD), source.read_bytes()))
-        used = {'ClawdBlast.qml': ['desk', 'fx', 'lens'], 'ClawdNuke.qml': ['nuke', 'lens'], 'ClawdRevive.qml': ['revive']}
+        used = {'ClawdBlast.qml': ['desk', 'fx', 'lens'], 'ClawdNuke.qml': ['nuke', 'lens'], 'ClawdRevive.qml': ['revive'], 'ClawdSymphony.qml': ['symphony'], 'ClawdSurge.qml': ['bulge', 'surge', 'clone']}
         for qml, names in used.items():
             text = dict(copied)[qs/'clawd'/qml].decode()
             self.assertNotRegex(text, r'shaders/\w+\.frag\.qsb', qml)
@@ -174,6 +174,8 @@ class ClawdSpriteTests(unittest.TestCase):
         # ClawdNuke: 0 startled, 1-4 panic run, 5 terror, 6 crouch, 7 launch, 8 slow motion, 9 crosses, 10 glint, 11-12 impact;
         # ClawdRevive: 0-4 the corpse lighting up, 5-9 standing again, white to orange, 10 eyes open
         self.assertEqual((manifest['animations']['nuke']['frames'], manifest['animations']['revive']['frames']), (13, 11))
+        self.assertEqual((manifest['animations']['recharge']['frames'], manifest['animations']['conduct']['frames']), (8, 16))
+        self.assertEqual(manifest['orchestra'], {'file': 'orchestra.png', 'frames': 14, 'w': 15, 'h': 12})  # 7 musicians, A and B poses  # ClawdRecharge: 0 drained, 1-5 filling up, 6 white, 7 cream
         self.assertEqual({k: manifest[k] for k in ('smoke', 'mushroom')}, {'smoke': {'file': 'smoke.png', 'frames': 12, 'w': 15, 'h': 16, 'fps': 6},
                                                                           'mushroom': {'file': 'mushroom.png', 'frames': 28, 'w': 96, 'h': 96}})
         for strip, w, h, n in (('antimatter.png', 49, 49, 12), ('explode.png', 21, 14, 12), ('nuke.png', 21, 14, 13), ('revive.png', 21, 14, 11),
@@ -203,7 +205,7 @@ class ClawdSpriteTests(unittest.TestCase):
                 with Image.open(SPRITES/clip['file']) as image:
                     self.assertEqual(image.mode, 'RGBA')
                     self.assertEqual(image.size, (clip['frames'] * w, h))
-                    self.assertLessEqual({c for _, c in image.getcolors(image.width * image.height)}, BLAST if name == 'explode' else LIMIT if name in ('nuke', 'dead', 'dead_land', 'revive', 'tada') else PALETTE)
+                    self.assertLessEqual({c for _, c in image.getcolors(image.width * image.height)}, BLAST if name == 'explode' else LIMIT if name in ('nuke', 'dead', 'dead_land', 'revive', 'tada', 'recharge', 'conduct', 'surge') else PALETTE)
         self.assertEqual({n for n, c in manifest['animations'].items() if c['loop']}, {'idle', 'walk', 'sit', 'sleep', 'drag', 'fall', 'work', 'alert', 'petpet', 'petpetheart',
                                                                                                'read', 'bash', 'search', 'web', 'task', 'todo',
                                                                                                'edit', 'edit_2', 'work_2', 'read_2', 'bash_2', 'search_2', 'web_2', 'task_2', 'todo_2', 'sweat',
@@ -643,6 +645,90 @@ Window {
                 return
             alpha = Image.open(out/'t36.6.png').getchannel('A')
             self.assertLess(ImageStat.Stat(alpha).mean[0], 30)         # the pulse revealed the live desktop again
+
+
+class ClawdSymphonyRenderTests(unittest.TestCase):
+    """The weekly reset on the GPU (offscreen OpenGL): a few moments of its storyboard checked by their pixels."""
+    TIMES = [1.1, 3.3, 13.5, 18.9, 19.7, 26.9, 27.8]
+    SCENE = """
+import QtQuick
+import QtQuick.Window
+import "%s" as C
+Window {
+    id: win
+    width: 640; height: 360; visible: true; color: "#2b2d3a"
+    property var times: [%s]
+    property int i: 0
+    C.ClawdSymphony { id: scene; anchors.fill: parent; pixel: 2; ox: 100; oy: 300; floorY: 330; manifest: %s }
+    Timer {
+        interval: 250; running: true; repeat: true
+        onTriggered: {
+            if (win.i >= win.times.length) { Qt.quit(); return; }
+            const t = win.times[win.i];
+            if (scene.t !== t) { scene.t = t; return; }
+            win.i++;
+            win.contentItem.grabToImage(r => r.saveToFile("%s/t" + t + ".png"));
+        }
+    }
+}
+"""
+
+    def test_storyboard_moments(self):
+        from PIL import Image, ImageStat
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out/'scene.qml').write_text(self.SCENE % (PAYLOAD.as_uri(), ', '.join(map(str, self.TIMES)), (SPRITES/'clawd.json').read_text(), out))
+            env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='rhi', QSG_RHI_BACKEND='opengl', QML_DISABLE_DISK_CACHE='1')
+            result = subprocess.run(['qml6', str(out/'scene.qml')], env=env, capture_output=True, text=True, timeout=90)
+            output = result.stdout + result.stderr
+            self.assertNotRegex(output, r'ClawdSymphony|shader|Shader|TypeError|ReferenceError', output)
+            frames = {}
+            for t in self.TIMES:
+                if not (out/f't{t}.png').is_file():
+                    self.skipTest('no offscreen GPU rendering here: ' + output[-300:])
+                frames[t] = Image.open(out/f't{t}.png').convert('RGB')
+            mean = lambda image, box=None: sum(ImageStat.Stat(image.crop(box) if box else image).mean) / 3
+            red = lambda image: ImageStat.Stat(image).mean[0] - ImageStat.Stat(image).mean[2]
+            sat = lambda image: ImageStat.Stat(image.convert('HSV')).mean[1]
+            self.assertGreater(red(frames[1.1]), 40)                    # the curtains are closed: red velvet everywhere
+            self.assertLess(mean(frames[3.3], (200, 40, 440, 220)), 60)  # the dark hall behind the open curtains
+            self.assertGreater(mean(frames[13.5], (100, 20, 540, 200)), mean(frames[3.3], (100, 20, 540, 200)) + 8)  # the pillars and staves light it
+            self.assertLess(sat(frames[18.9]), sat(frames[13.5]) * 0.6)   # the silence drains the colour
+            self.assertGreater(mean(frames[19.7]), mean(frames[13.5]))   # the final chord
+            self.assertGreater(red(frames[26.9]), 40)                    # the curtains close again
+            self.assertLess(mean(frames[27.8], (200, 100, 440, 250)), mean(frames[19.7], (200, 100, 440, 250)))
+
+
+class ClawdSurgeRenderTests(unittest.TestCase):
+    """The superpowered weekly scene on the GPU (offscreen OpenGL): a few moments of its storyboard checked by their pixels."""
+    TIMES = [0.2, 3.2, 5.02, 5.1, 13.9, 21.5, 29.1, 43.59]
+
+    def test_storyboard_moments(self):
+        from PIL import Image, ImageStat
+        scene = ClawdSymphonyRenderTests.SCENE.replace('C.ClawdSymphony { id: scene;', 'C.ClawdSurge { id: scene; desk: null; verbs: ["Pondering"];')
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out/'scene.qml').write_text(scene % (PAYLOAD.as_uri(), ', '.join(map(str, self.TIMES)), (SPRITES/'clawd.json').read_text(), out))
+            env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='rhi', QSG_RHI_BACKEND='opengl', QML_DISABLE_DISK_CACHE='1')
+            result = subprocess.run(['qml6', str(out/'scene.qml')], env=env, capture_output=True, text=True, timeout=90)
+            output = result.stdout + result.stderr
+            self.assertNotRegex(output, r'ClawdSurge|shader|Shader|TypeError|ReferenceError', output)
+            frames = {}
+            for t in self.TIMES:
+                if not (out/f't{t}.png').is_file():
+                    self.skipTest('no offscreen GPU rendering here: ' + output[-300:])
+                frames[t] = Image.open(out/f't{t}.png').convert('RGB')
+            mean = lambda image, box=None: sum(ImageStat.Stat(image.crop(box) if box else image).mean) / 3
+            base = mean(frames[0.2], (0, 0, 120, 80))
+            self.assertGreater(mean(frames[3.2], (0, 0, 120, 80)), base + 40)            # light bleeding in at the top-left corner
+            self.assertGreater(mean(frames[5.02]), 150)                                    # impact frame: white
+            self.assertLess(mean(frames[5.1]), 110)                                       # impact frame: black
+            alpha = lambda t, box: ImageStat.Stat(Image.open(out/f't{t}.png').convert('RGBA').getchannel('A').crop(box)).mean[0]
+            self.assertGreater(alpha(13.9, (0, 0, 640, 60)), 150)                          # dark while zoomed on his wink
+            colours = frames[21.5].crop((0, 280, 640, 330)).getcolors(1 << 20)
+            self.assertTrue(any(abs(r - 0xFF) < 8 and abs(g - 0xC1) < 8 and b < 40 for _, (r, g, b) in colours))  # the low helper, #FFC107
+            self.assertGreater(mean(frames[29.1], (40, 0, 600, 200)), mean(frames[21.5], (40, 0, 600, 200)) + 10)  # six beams
+            self.assertLess(alpha(43.59, (0, 0, 640, 360)), 10)                            # gone again
 
 
 class ClawdNukeRenderTests(unittest.TestCase):

@@ -8,6 +8,12 @@ nuke = the nuclear variant's poses (ClawdNuke.qml picks them by index): startled
 float, crossed eyes, the glint, black and white impact silhouettes ('r' red alarm, 'y' sweat). mushroom = the 96x96 cloud, frame by frame.
 After either: dead (grey 'g' corpse on his back) / dead_land (the thud, 'u' dust), smoke = 15x16 wisps drawn above the corpse
 ('n' 'm' 's', translucent); revive = the revival poses (ClawdRevive.qml), from grey through holy white back to orange; tada ('q' gold).
+conduct = the weekly reset's conductor (bow tie 'r', baton 'z'/'w'; 16 poses: front, bows, turning, back, beats, leap, cutoff, spin, triumph);
+orchestra = its 7 musicians 15x12, A/B frames each (violin, flute, cello, trumpet, harp, timpani, cymbals; brown 'k').
+surge = the superpowered weekly scene's poses (ClawdSurge.qml: startle, look, poker face, inhale, power, dash, wink, skid, slam,
+levitate, triumph; white 'w' glowing eyes); clone = his helpers, white-bodied ('w', recoloured per effort level by clone.frag):
+idle, bob, typing A/B, cheer A/B, landing squash, looking at the middle, then A/B work poses copied from read, bash, search, edit, todo, web.
+recharge = the 5 h reset poses (ClawdRecharge.qml): drained and dark ('e'), refilling from the feet up in 5 levels, white, cream.
 hand.png (the petpet hand, drawn over Clawd in sync with his frames) is cut out of scripts/clawd/hand-pet.gif.
 An animation may set a grip = its contact point with the support, in frame pixels from the frame's top-left, unmirrored
 (mirrored: W - gx). The pet places him at x = contactX - gx*scale, y = contactY - gy*scale; without one the manifest has no
@@ -44,18 +50,24 @@ ANIMS = {
     'teeter': (6, True), 'peek': (4, True),
     # the limit: the nuclear variant's poses, then dead until revived
     'nuke': (12, False), 'dead': (1, True), 'dead_land': (10, False), 'revive': (10, False), 'tada': (8, False),
+    # the 5 h limit resetting: drained, charging up level by level, the white flash
+    'recharge': (10, False),
+    # the weekly reset: the conductor's poses (ClawdSymphony.qml picks them by index; the 7 musicians are orchestra.png)
+    'conduct': (8, False),
+    # the weekly limit, the superpowered way: startled, hit by a magic orb, absorbs it, dashes, slams, levitates (ClawdSurge.qml)
+    'surge': (10, False),
 }
 BLAST = {**PALETTE, **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
     'a': 'e8946c', 'b': 'f4b68e', 'c': 'fcddc2', 'w': 'ffffff', 'v': '6e3bff'}.items()}}
 ANTIMATTER = {'.': (0, 0, 0, 0), **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
     'w': 'ffffff', 'c': 'a8f4ff', 'b': '38c8ff', 'v': '8b5cff', 'm': 'ff4fd8', 'd': '2b0f52', 'k': '06020c'}.items()}}
 LIMIT = {**BLAST, **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
-    'r': 'e5484d', 'y': '8fd3ff', 'g': '8c8782', 'd': '5c5854', 'u': 'b8b2aa', 'l': 'c9c4be', 'q': 'ffd56b'}.items()}}
+    'r': 'e5484d', 'y': '8fd3ff', 'g': '8c8782', 'd': '5c5854', 'u': 'b8b2aa', 'l': 'c9c4be', 'q': 'ffd56b', 'e': '8f4a38', 'k': '7a4a30'}.items()}}
 SMOKE = {'.': (0, 0, 0, 0), 'n': (0x5c, 0x58, 0x54, 200), 'm': (0x8c, 0x87, 0x82, 170), 's': (0xbe, 0xba, 0xb4, 140)}
 MUSHROOM = {'.': (0, 0, 0, 0), **{k: tuple(bytes.fromhex(v)) + (255,) for k, v in {
     'W': 'ffffff', 'Y': 'fff2b8', 'E': 'ffcf4d', 'O': 'ff9028', 'R': 'e0501c', 'D': '9e2c18', 'B': '5a2a1e',
     'K': '3a2b27', 'G': '6e5f57', 'L': 'a8988c', 'C': 'e6ecf2'}.items()}}
-NEW = {'nuke', 'dead', 'dead_land', 'revive', 'tada'}
+NEW = {'nuke', 'dead', 'dead_land', 'revive', 'tada', 'recharge', 'conduct', 'surge'}
 HAND = Path(__file__).resolve().parent/'hand-pet.gif'
 HAND_SCALE = 3  # source frames are 474x498, Clawd shows the hand at most ~16 px x8
 
@@ -141,6 +153,12 @@ def build():
     smoke = frames('smoke', 15, 16, SMOKE)
     files['smoke.png'] = png(smoke, 15, 16, SMOKE)
     manifest['smoke'] = {'file': 'smoke.png', 'frames': len(smoke), 'w': 15, 'h': 16, 'fps': 6}
+    band = frames('orchestra', 15, 12, LIMIT)
+    files['orchestra.png'] = png(band, 15, 12, LIMIT)
+    manifest['orchestra'] = {'file': 'orchestra.png', 'frames': len(band), 'w': 15, 'h': 12}
+    clones = frames('clone', W, H, LIMIT)
+    files['clone.png'] = png(clones, W, H, LIMIT)
+    manifest['clone'] = {'file': 'clone.png', 'frames': len(clones), 'w': W, 'h': H}
     cloud = frames('mushroom', 96, 96, MUSHROOM)
     files['mushroom.png'] = png(cloud, 96, 96, MUSHROOM)
     manifest['mushroom'] = {'file': 'mushroom.png', 'frames': len(cloud), 'w': 96, 'h': 96}

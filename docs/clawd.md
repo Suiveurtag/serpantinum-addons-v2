@@ -38,9 +38,10 @@ quickshell -p … ipc call clawd state       # debug: JSON of his mode, support,
 `fall`, `land`, `spawn`, `think`, `work`, `oops`, `alert`, `happy`, `petpet`, `petpetheart`,
 `read`, `bash`, `search`, `web`, `task`, `todo`, `compact`, `startled`, `edit`, `edit_2`, `work_2`, `read_2`,
 `bash_2`, `search_2`, `web_2`, `task_2`, `todo_2`, `think_2`, `happy_2`, `celebrate`, `sweat`, `coin`, `sad`, `wave`,
-`explode`, `perch`, `perch_look`, `hop`, `stumble`, `teeter`, `peek`, `nuke`, `dead`, `dead_land`, `revive`, `tada`; 56 in all); loops play
+`explode`, `perch`, `perch_look`, `hop`, `stumble`, `teeter`, `peek`, `nuke`, `dead`, `dead_land`, `revive`, `tada`, ...; 59 in all); loops play
 for about 3 s, then normal behaviour resumes. Scenes: `play explode` previews the singularity (about 37 s), `play nuke` the nuclear
-variant (about 20 s), `play limit` either at random (Escape skips to the end; both leave him dead); `play revive` brings him back.
+variant (about 20 s), `play limit` either at random (Escape skips to the end; both leave him dead); `play surge` the superpowered
+weekly variant (about 41 s, he survives it); `play revive` brings him back.
 Nothing else plays while he is dead.
 
 ## Windows and screens
@@ -122,7 +123,7 @@ head in `full` thoughts mode, and stay in memory in the shell only (never writte
 | Session start | `wave`, except when Claude restarts the session after a compaction (and the spinner verbs are re-read, at most every 30 s) |
 | Compaction (Claude) | `compact` (squashed flat) |
 | Stats (`Status`, see below): cost crosses a new multiple of $5 | `coin` |
-| Stats: a 5-hour or 7-day limit reaches 100 % | the singularity or the nuke, at random (below), then dead |
+| Stats: 5-hour / 7-day limit reaches 100 % | nuke / singularity (then dead) or surge, at random for 7 days |
 
 While working he plays the loop of the last tool used by the lead session (the working
 session that moved last), picking at random between the loop and its `_2` variant each time
@@ -276,12 +277,11 @@ other addons are untouched.
    close it: he falls and says `oops`. Move the cursor to the other screen for a few seconds:
    he walks over. `ipc call clawd state` shows `support` and `world`.
 
-### The limit (quota at 100 %): the singularity or the nuke
+### Quota limits and resets
 
-When a Claude Code or Codex 5-hour or 7-day limit goes from below 100 % to 100 %, Clawd goes singular or nuclear (at random), once per
-window (a new `resets_at` rearms it; a value first seen at 100 %, after a shell restart, does not). Claude needs the
-card's `stats` connection and a running session; Codex is polled every 30 s with `scripts/clawd/codex_limits.py`,
-which reads only the used % and reset time of the latest rate-limit snapshot in recent local session logs.
+A 5-hour limit reaching 100% plays `nuke`; a 7-day limit plays the singularity or the surge, at random (`limit7`). Each provider and window is tracked independently. A first reading at 100% establishes the current state without an explosion; a later observed transition from below 100% triggers it once per window. Stale lower readings cannot rearm the same window. At a known reset deadline, or when a fresh snapshot reports the next window, Clawd plays `recharge` for the 5-hour window; the 7-day reset is silent. Scenes wait their turn and revive him first if needed. Quota state is saved across shell restarts. The first reading after a restart establishes the current state, so an exhaustion missed while the shell was stopped is not replayed.
+
+Claude needs the card's `stats` connection and a running session; Codex is polled every 30 s with `scripts/clawd/codex_limits.py`, which reads only the used % and reset time of the latest rate-limit snapshot in recent local session logs. If the provider has not supplied a recent snapshot, detection is best-effort.
 
 About 37 s, on Clawd's screen, above everything (layer `qs-addon-clawd-blast`, Overlay); other screens darken,
 flash and come back with it. He freezes, then the screen does (a `ScreencopyView` capture taken while he is
@@ -309,6 +309,25 @@ cooling from white to dark red, embers, dissipation), glowing, with embers flung
 the shake and chromatic split of `lens.frag`, the desktop lit and scorched by it; ash drifts down, everything fades
 over the live desktop and his corpse falls where it went off. Storyboard: `animations/NUKE.md` in the Clawd project.
 `ClawdNuke.qml` + `shaders/nuke.frag`; poses `nuke` (13).
+
+### The surge (7-day limit, superpowered)
+
+About 41 s, drawn by his overlay over the live desktop (click-through, `ClawdSurge.qml` + `shaders/{surge,bulge,clone}.frag`).
+He jumps with a `!`, stares at the top-left corner where light bleeds along the edges and the screen bulges inwards
+(`bulge.frag` on a capture taken at the start) until a magic orb tears through and hits him: black-and-white impact
+frames, an explosion of light, violet smoke and glowing wisps. Poker-faced and sooty, he inhales all of it, flashes,
+pulses with lightning and keeps an aura. He dashes right: the screen darkens, the camera zooms on his glowing wink, then
+out; he leaves the screen and the overlay switches his screen to an empty workspace (`workspace emptynm`), he comes back
+in twice as big, skids to the middle and strikes the floor, which lights up in colour and climbs the sides of the screen.
+Six helpers arrive, one per effort level, each its own way (`clone` strip recoloured by `clone.frag`): low #FFC107 falls
+from the sky, medium #4EBA65 rises from the floor, high #B1B9F9 materialises in a pillar (left side); xhigh #AF87FF
+slides in with a white glint now and then, max (Claude Code's light colours, flowing) steps out of a rainbow portal,
+ultra #9BF6FF comes with a lightning strike and crackles (right side). One by one they start working (typing, an ASCII
+spinner line with a spinner verb) and each sends a vertical beam across the screen, stronger with the effort (sparks,
+rings, white sweeps, rainbow, lightning arcs and shake). Then he rises, light at the end of his arms, their streams
+arc into him and an ASCII bar recharges the week (`[#####.....]  48% left` -> `RESTORED`), a burst, the helpers vanish,
+he lands, a blackout hides the way back to the workspace he left, and he stays in the middle of his screen.
+Storyboard: `animations/SURGE.md` in the Clawd project. Poses `surge` (22); helpers `clone` (8, white body).
 
 ### Dead, and revived
 

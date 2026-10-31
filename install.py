@@ -774,6 +774,22 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("''' + command + '''"), { locked = 
     return text.replace(anchor, anchor + addition, 1)
 
 
+def patch_window_keybinds(text):
+    marker = '-- BEGIN serpantinum-addons-v2 window switching'
+    if marker in text: return text
+    if '"SUPER + Tab"' in text or '"ALT + Tab"' in text: raise ValueError('Window switching shortcuts already in use')
+    anchor = '-- END serpantinum-addons-v2 color picker'
+    if text.count(anchor) != 1: raise ValueError('Color picker shortcut anchor changed')
+    mouse_script = str(HOME/'.config/hypr/scripts/mouse-next-monitor-center.sh')
+    addition = '''\n-- BEGIN serpantinum-addons-v2 window switching
+-- Super+Tab : écran suivant + souris au centre de cet écran
+hl.bind("SUPER + Tab", hl.dsp.exec_cmd("''' + mouse_script + '''"))
+-- Alt+Tab : fenêtre suivante dans l'écran et le workspace courants, mise au premier plan
+hl.bind("ALT + Tab", hl.dsp.exec_cmd("hyprctl eval 'hl.dispatch(hl.dsp.window.cycle_next()); hl.dispatch(hl.dsp.window.bring_to_top())'"))
+-- END serpantinum-addons-v2 window switching'''
+    return text.replace(anchor, anchor + addition, 1)
+
+
 def patch_spotlight_keybind(text):
     # Preserve user edits and deletions inside the managed block on reinstall.
     marker = '-- BEGIN serpantinum-addons-v2 mouse spotlight'
@@ -864,7 +880,7 @@ def install(without_halloween=False, without_capri=False, without_clawd=False):
     screenshot_script = QS.parent/'scripts/screenshot.sh'
     pending[screenshot_script] = patch_screenshot_frozen_validation(patch_screenshot_cleanup(patch_screenshot_script(screenshot_script.read_text())))
     keybind_path = HOME/'.config/hypr/config/keybinds.lua'
-    pending[keybind_path] = remove_inline_settings(patch_draw_keybind(patch_zoom_keybind(patch_spotlight_keybind(patch_keybinds(keybind_path.read_text())))), '--')
+    pending[keybind_path] = remove_inline_settings(patch_draw_keybind(patch_zoom_keybind(patch_spotlight_keybind(patch_window_keybinds(patch_keybinds(keybind_path.read_text()))))), '--')
     for path, transform in seasonal.transformations(QS).items():
         text = pending[path] if path in pending else path.read_text()
         pending[path] = seasonal.remove(text) if without_halloween else transform(text)

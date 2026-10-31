@@ -27,9 +27,9 @@ QtObject {
     // tool/target = last tool used this turn and its short target, pids = the hook's ancestors, stats from the status line relay.
     // phase: work | alert | idle. Kept while Clawd is OFF so he shows the right state when he comes back.
     property var sessions: ({})
-    // Quota windows: "agent:five_hour|seven_day" -> {used, resets, fired}; used % going from below 100 to 100 sets off the
-    // limit scene (the singularity or the nuke, at random), once per window (fired = the resets_at it went off for).
-    property var quotas: ({})
+    // Quota windows are tracked per provider and window, independently of sessions.
+    property var quotas: Config.getSetting("addonsV2ClawdQuotas", {})
+    property var observed: ({})
     property var bubble: null      // {key, kind: permission | done | waiting | error, text}
     property int staleMs: 120000
     property var verbs: ["Thinking"]   // Claude Code's spinner verbs (verbs.py), until loaded
@@ -167,7 +167,7 @@ QtObject {
             if (str(e.effort, 16)) s.effort = str(e.effort, 16);
             for (const k of ["ctx", "cost", "five_hour", "seven_day", "five_hour_resets", "seven_day_resets"]) if (typeof e[k] === "number" && Number.isFinite(e[k])) s[k] = e[k];
             if (was && Number.isFinite(was.cost) && Number.isFinite(s.cost) && Math.floor(s.cost / 5) > Math.floor(was.cost / 5)) react = "coin";
-            if (exhausted(e.agent, e)) react = "limit";
+            updateQuotas(e.agent, e);
             // status refreshes are frequent: no churn when nothing moved
             if (!react && was && Object.keys(s).length === Object.keys(was).length && Object.keys(s).every(k => JSON.stringify(s[k]) === JSON.stringify(was[k]))) return;
             next[key] = s;
@@ -181,22 +181,46 @@ QtObject {
         if (react) command("react", react);
         if (fresh) sessionStarted();
     }
-    // A status snapshot's used % per window (five_hour, seven_day are per account, whatever the session): true when one
-    // just reached 100 from below. A value first seen at 100 (shell restart) only primes it; a new window rearms it.
-    function exhausted(agent, e) {
-        let hit = false;
-        const next = Object.assign({}, quotas);
+    function saveQuotas(next) {
+        if (JSON.stringify(next) === JSON.stringify(quotas)) return;
+        quotas = next;
+        Config.setSetting("addonsV2ClawdQuotas", next);
+    }
+    function updateQuotas(agent, e) {
+        const next = Object.assign({}, quotas), seen = Object.assign({}, observed), events = [], now = Date.now() / 1000;
         for (const w of ["five_hour", "seven_day"]) {
-            const used = e[w], resets = Number.isFinite(e[w + "_resets"]) ? e[w + "_resets"] : 0;
+            const used = e[w], key = agent + ":" + w, was = next[key];
             if (!Number.isFinite(used)) continue;
-            const key = agent + ":" + w, was = next[key];
-            const fired = was && was.resets === resets ? was.fired : false;
-            const crossed = !!was && was.used < 100 && used >= 100 && !fired;
-            next[key] = { used, resets, fired: fired || crossed };
-            hit = hit || crossed;
+            const resets = Number.isFinite(e[w + "_resets"]) ? e[w + "_resets"] : (was ? was.resets : 0);
+            if (was && resets && was.resets && resets < was.resets) continue;
+            if (was && was.consumed && resets === was.resets) continue;
+            const changed = !!(was && resets && was.resets && resets > was.resets && was.resets <= now);
+            if (changed && !was.consumed && w === "five_hour") events.push("recharge");
+            const fired = was && !changed && was.fired;
+            const crossed = !!(seen[key] && was && !changed && was.used < 100 && used >= 100 && !fired);
+            if (crossed) events.push(w === "five_hour" ? "nuke" : "limit7");  // limit7: the singularity or the surge
+            next[key] = { used: was && !changed ? Math.max(was.used, used) : used, resets, fired: !!fired || crossed,
+                          watched: resets > now || !!(was && !changed && was.watched), consumed: false };
+            seen[key] = true;
         }
-        if (JSON.stringify(next) !== JSON.stringify(quotas)) quotas = next;
-        return hit;
+        observed = seen;
+        saveQuotas(next);
+        for (const event of events) command("quota", event);
+    }
+    function checkQuotaResets() {
+        const next = Object.assign({}, quotas), events = [], now = Date.now() / 1000;
+        for (const key of Object.keys(next)) {
+            const q = next[key];
+            if (!q.watched || q.consumed || q.resets > now) continue;
+            next[key] = Object.assign({}, q, { used: 0, consumed: true });
+            if (key.endsWith(":five_hour")) events.push("recharge");
+        }
+        saveQuotas(next);
+        for (const event of events) command("quota", event);
+    }
+    readonly property QtObject quotaTimer: Timer {
+        interval: 1000; repeat: true; running: clawd.enabled
+        onTriggered: clawd.checkQuotaResets()
     }
     readonly property QtObject codexTimer: Timer {
         interval: 30000; repeat: true; running: clawd.enabled
@@ -278,7 +302,7 @@ QtObject {
     function play(name) {
         if (!enabled) return "off";
         // the limit scenes (limit = either at random) and the revival are scenes, not strips
-        if (!manifest || ["limit", "nuke", "revive"].indexOf(name) < 0 && !Object.prototype.hasOwnProperty.call(manifest.animations, name)) return "unknown";
+        if (!manifest || ["limit", "nuke", "revive", "recharge", "weekly", "surge", "limit7"].indexOf(name) < 0 && !Object.prototype.hasOwnProperty.call(manifest.animations, name)) return "unknown";
         command("play", name);
         return "ok";
     }

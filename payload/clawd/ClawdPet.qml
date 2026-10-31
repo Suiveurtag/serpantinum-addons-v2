@@ -42,11 +42,16 @@ Item {
     // The singularity (ClawdSingularity): {screen, x, y, animation, frame, mirrored, scale, clock}; clock = ms when its
     // timeline was at 0, set once his screen is captured. blasting: frozen inside it, nothing else moves him.
     property var blast: null       // + kind: singularity | nuke
+    property var quotaQueue: []
     property bool blasting: false
     property bool blastHidden: false
     // Dead after a limit scene until revived (menu, a new agent session, or a shell start 3 h later). Kept in Config
     // (addonsV2ClawdDead = when he died, ms) so a reload finds his corpse; reviveAt = ms when the revival started.
     property bool dead: false
+    property real weeklyAt: 0      // ms when the weekly reset scene started (mode weekly)
+    property real surgeAt: 0       // ms when the superpowered weekly scene started (mode surge)
+    property var surgeHome: null   // the workspace id his screen showed before he dashed to an empty one
+    property real rechargeAt: 0    // ms when the 5 h reset scene started (mode recharge)
     property real deadAt: 0
     property real reviveAt: 0
     readonly property int reviveAfter: 3 * 3600000
@@ -104,14 +109,14 @@ Item {
     function ledgeOf(s) { return s && world ? world.ledge(s.id) : null; }
 
     function enter(m, anim, flip, back) {
-        if (blasting || dead && ["corpse", "dead", "revive"].indexOf(m) < 0) return;
+        if (blasting || dead && ["corpse", "dead", "revive", "carried"].indexOf(m) < 0) return;
         const name = clipName(anim), was = grip(animation, mirrored);
         mode = m;
         mirrored = !!flip;
         reverse = !!back;
         animation = name;
         // the contact point stays put: grips differ (perch sits on the seat line, legs below the ledge)
-        if (m !== "drag") { const g = grip(name, mirrored); x += was.x - g.x; y += was.y - g.y; }
+        if (m !== "drag" && m !== "carried") { const g = grip(name, mirrored); x += was.x - g.x; y += was.y - g.y; }
         clock.restart();
         last = Date.now();
         const clip = Clawd.manifest && Clawd.manifest.animations[name];
@@ -136,7 +141,7 @@ Item {
         else if (mode === "teeter") edge();
         else if (mode === "peek") unpeek();
         else if (mode === "react" && resume && grounded()) { const r = resume; resume = null; enter(r.mode, r.animation, r.mirrored); }
-        else if (["sleep", "drag", "walk", "hop"].indexOf(mode) < 0) idle();
+        else if (["sleep", "drag", "walk", "hop", "recharge", "weekly", "surge"].indexOf(mode) < 0) idle();
     }
     // Back to his resting pose on whatever holds him: perch on a window, idle on the floor; no valid support: fall.
     function idle() {
@@ -320,7 +325,7 @@ Item {
         return d ? { id: "floor:" + d.id, kind: "floor", x: d.x, y: d.floor, w: d.w, display: d.id } : null;
     }
     function placeOnSupport() {
-        if (!here || ["drag", "fall", "hop", "corpse", "revive"].indexOf(mode) >= 0) return;
+        if (!here || ["drag", "fall", "hop", "corpse", "revive", "carried", "recharge", "weekly", "surge"].indexOf(mode) >= 0) return;
         if (support) return revalidate();
         placeAt(contact().x, here.floor);
         if (!intent || ["cross", "leave"].indexOf(intent.kind) < 0) x = clampX(here, x);
@@ -336,7 +341,7 @@ Item {
                 else if (intent && intent.kind === "peek") idle();
             }
         }
-        if (!support || ["drag", "fall", "hop"].indexOf(mode) >= 0) return;
+        if (!support || ["drag", "fall", "hop", "recharge", "weekly", "surge"].indexOf(mode) >= 0) return;
         const l = ledgeOf(support), c = contact(), cx = l ? l.x + support.dx : 0;
         if (!l || !World.span(world.wins, l, cx)) return lose(false);
         if (Math.abs(cx - c.x) + Math.abs(l.y - c.y) > 200) return lose(true);  // yanked away: startled mid-air
@@ -348,7 +353,7 @@ Item {
     function lose(startle) {
         support = null; hop = null; target = null; intent = null; fallTarget = null;
         vy = 0;
-        if (mode === "drag") return;
+        if (mode === "drag" || mode === "recharge" || mode === "weekly" || mode === "surge") return;
         lost = true;
         touch();
         enter("fall", startle ? "startled" : "fall");
@@ -510,11 +515,30 @@ Item {
         touch();
         if (mode === "sleep") enter("idle", "blink");
     }
+    function enqueueQuota(name) {
+        quotaQueue = quotaQueue.concat([name]);
+        runQuota();
+    }
+    function runQuota() {
+        if (!quotaQueue.length || blast || mode === "revive" || mode === "recharge" || mode === "weekly" || mode === "surge") return;
+        if (dead) { revive(); return; }
+        if (!here || !grounded() || grab && grab.moved || ["fall", "hop", "drag"].indexOf(mode) >= 0) return;
+        const name = quotaQueue[0];
+        quotaQueue = quotaQueue.slice(1);
+        perform(name);
+    }
+    Timer { interval: 1000; repeat: true; running: pet.quotaQueue.length > 0; onTriggered: pet.runQuota() }
+
     function perform(name) {
         if (name === "limit") return explode(Math.random() < 0.5 ? "singularity" : "nuke");  // the quota ran out: either end
         if (name === "explode") return explode("singularity");
         if (name === "nuke") return explode("nuke");
         if (name === "revive") return revive();
+        if (name === "recharge") return recharge();
+        if (name === "weekly") return weekly();
+        if (name === "surge") return surge();
+        if (name === "limit7") return Clawd.roll() < 0.5 ? explode("singularity") : surge();  // the weekly quota ran out
+        if (mode === "recharge" || mode === "weekly" || mode === "surge") return;
         if (dead || !Clawd.manifest || !Clawd.manifest.animations[name] || grab && grab.moved) return;
         touch();
         target = null;
@@ -559,6 +583,7 @@ Item {
     function revive() {
         if (!dead || mode === "revive" || blast) return;
         if (mode === "corpse" && here) placeAt(contact().x, here.floor);  // still falling: down at once
+        grab = null;
         menuOpen = false;
         reviveAt = Date.now();
         enter("revive", "dead");
@@ -570,6 +595,67 @@ Item {
         Config.setSetting("addonsV2ClawdDead", 0);
         touch();
         idle();
+    }
+    // The 5 h limit is back: ClawdRecharge plays on his screen's overlay (he stays where he stands), whose end calls
+    // recharged(). A dead Clawd simply comes back to life instead.
+    function recharge() {
+        if (dead) return revive();
+        if (blast || !here || !grounded() || grab && grab.moved || ["recharge", "weekly", "surge", "revive", "corpse", "carried", "explode", "fall", "hop", "drag"].indexOf(mode) >= 0) return;
+        grab = null; menuOpen = false; journalOpen = false; target = null; intent = null; resume = null; hop = null;
+        rechargeAt = Date.now();
+        enter("recharge", "idle");
+    }
+    // The weekly limit is back: the symphony (ClawdSymphony on his screen's overlay; the curtains hide his move to the
+    // stage), whose end calls weeklied(). Dead: he comes back to life instead.
+    function weekly() {
+        if (dead) return revive();
+        if (blast || !here || !grounded() || grab && grab.moved || ["recharge", "weekly", "surge", "revive", "corpse", "carried", "explode", "fall", "hop", "drag"].indexOf(mode) >= 0) return;
+        grab = null; menuOpen = false; journalOpen = false; target = null; intent = null; resume = null; hop = null;
+        weeklyAt = Date.now();
+        enter("weekly", "idle");
+    }
+    function weeklied() {
+        if (mode !== "weekly") return;
+        touch();
+        idle();
+        busy();
+    }
+    // The weekly limit ran out, the superpowered way: ClawdSurge on his screen's overlay (an orb hits him, he absorbs it,
+    // dashes to an empty workspace, summons six helpers and recharges the week); he ends in the middle of his screen,
+    // back on the workspace he left: surged(gx). Dead: he comes back to life instead.
+    function surge() {
+        if (dead) return revive();
+        if (blast || !here || !grounded() || grab && grab.moved || ["recharge", "weekly", "surge", "revive", "corpse", "carried", "explode", "fall", "hop", "drag"].indexOf(mode) >= 0) return;
+        grab = null; menuOpen = false; journalOpen = false; target = null; intent = null; resume = null; hop = null;
+        surgeAt = Date.now();
+        surgeHome = null;
+        enter("surge", "idle");
+    }
+    // During his dash: an empty workspace on his screen (away), then the one he left (back).
+    function surgeWorkspace(away) {
+        if (!hypr || mode !== "surge") return;
+        const name = Clawd.screenName, m = Hyprland.monitors.values.find(v => v.name === name);
+        if (away) surgeHome = m && m.activeWorkspace ? m.activeWorkspace.id : null;
+        else if (surgeHome === null) return;
+        // Lua dispatchers (the shell's Hyprland takes hl.dsp.*, like the bar's workspace buttons)
+        if (!Hyprland.focusedMonitor || Hyprland.focusedMonitor.name !== name) Hyprland.dispatch("hl.dsp.focus({ monitor = \"" + name + "\" })");
+        Hyprland.dispatch(away ? "hl.dsp.focus({ workspace = \"emptynm\" })" : "hl.dsp.focus({ workspace = " + surgeHome + " })");
+        if (!away) surgeHome = null;
+    }
+    function surged(gx) {
+        if (mode !== "surge") return;
+        if (surgeHome !== null) surgeWorkspace(false);
+        support = null; cover = null; coverId = ""; peeking = null;
+        if (here && gx !== undefined) { x = Math.round(clampX(here, gx - width / 2)); placeAt(contact().x, here.floor); }
+        touch();
+        idle();
+        busy();
+    }
+    function recharged() {
+        if (mode !== "recharge") return;
+        touch();
+        idle();
+        busy();
     }
     function clockRunning() { return clock.running; }  // test hook
 
@@ -584,7 +670,11 @@ Item {
     function press(button, gx, gy) {
         touch();
         if (button === Qt.RightButton) { openMenu(); return; }
-        if (dead) return;  // he does not react any more
+        if (mode === "recharge" || mode === "weekly" || mode === "surge") return;
+        if (dead) {  // he does not react any more, but his corpse can be carried (only where it lies)
+            if (button === Qt.LeftButton && ["dead", "carried"].indexOf(mode) >= 0) grab = { x: gx, y: gy, dx: gx - x, dy: gy - y, moved: false };
+            return;
+        }
         if (button === Qt.MiddleButton) { petpet(); return; }
         grab = { x: gx, y: gy, dx: gx - x, dy: gy - y, moved: false };
     }
@@ -594,9 +684,14 @@ Item {
         if (!grab.moved) {
             grab.moved = true;
             menuOpen = false;
-            target = null;
-            intent = null; support = null; hop = null; cover = null; coverId = ""; peeking = null; resume = null;
-            enter("drag", "drag");
+            if (dead) {
+                if (mode !== "dead") { grab = null; return; }
+                enter("carried", "dead");
+            } else {
+                target = null;
+                intent = null; support = null; hop = null; cover = null; coverId = ""; peeking = null; resume = null;
+                enter("drag", "drag");
+            }
         }
         x = gx - grab.dx;
         y = gy - grab.dy;
@@ -607,6 +702,15 @@ Item {
         grab = null;
         if (!g) return;
         touch();
+        if (dead) {  // dropped corpse: it falls to the floor of the screen it was dropped on
+            if (!g.moved || mode !== "carried") return;
+            refresh();
+            const d = displayAt(gx === undefined ? x + width / 2 : gx, gy === undefined ? y + height / 2 : gy);
+            if (d) { Clawd.screenName = d.id; x = clampX(d, x); y = Math.max(y, d.y); }
+            vy = 0;
+            enter("corpse", "dead");
+            return;
+        }
         if (!g.moved) {
             journalOpen = !journalOpen;
             if (mode === "sleep") wake();
@@ -638,7 +742,7 @@ Item {
         else if (animation !== fam) enter("work", fam);
     }
     function openMenu() {
-        if (mode === "revive" || mode === "corpse") return;
+        if (["revive", "corpse", "carried", "recharge", "weekly", "surge"].indexOf(mode) >= 0) return;
         if (mode === "walk" || mode === "turn") idle();
         journalOpen = false;
         menuOpen = true;
@@ -656,7 +760,7 @@ Item {
 
     Connections {
         target: Clawd
-        function onCommand(name, arg) { if (name === "play" || name === "react") pet.perform(arg); }
+        function onCommand(name, arg) { if (name === "quota") pet.enqueueQuota(arg); else if (name === "play" || name === "react") pet.perform(arg); }
         function onActivityChanged() { pet.busy(); }
         function onSessionStarted() { pet.revive(); }  // a new Claude Code / Codex session brings him back
         function onWorkAnimChanged() { if (pet.mode === "work" && Clawd.activity === "work") pet.enter("work", Clawd.variant(Clawd.workAnim)); }
